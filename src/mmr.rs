@@ -169,7 +169,7 @@ impl<T: PartialEq + Debug, M: Merge<Item = T>> MerkleProof<T, M> {
         let mut proof_iter = self.proof.iter();
         // calculate peak's merkle root
         // start bagging peaks if pos reach a peak pos
-        while !peaks.contains(&pos) {
+        while peaks.binary_search(&pos).is_err() {
             let proof = match proof_iter.next() {
                 Some(proof) => proof,
                 None => break,
@@ -189,8 +189,8 @@ impl<T: PartialEq + Debug, M: Merge<Item = T>> MerkleProof<T, M> {
         }
 
         // bagging peaks
-        // bagging with left peaks if pos is last peak
-        let mut bagging_left = Some(&pos) == peaks.last();
+        // bagging with left peaks if pos is last peak(last pos)
+        let mut bagging_left = pos == self.mmr_size - 1;
         for proof in &mut proof_iter {
             sum_elem = if bagging_left {
                 M::merge(&sum_elem, &proof)
