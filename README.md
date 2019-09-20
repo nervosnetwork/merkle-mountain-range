@@ -1,4 +1,5 @@
 # Merkle mountain range
+[![Crates.io](https://img.shields.io/crates/v/ckb-merkle-mountain-range.svg)](https://crates.io/crates/ckb-merkle-mountain-range)
 
 A generalized merkle mountain range implementation.
 

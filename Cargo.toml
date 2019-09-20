@@ -5,6 +5,7 @@ authors = ["Nervos Core Dev <dev@nervos.org>"]
 edition = "2018"
 license = "MIT"
 description = "A generalized merkle mountain range implementation"
+repository = "https://github.com/nervosnetwork/merkle-mountain-range"
 
 [dependencies]
 failure = "0.1.5"
