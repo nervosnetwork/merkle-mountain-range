@@ -1,4 +1,4 @@
-use crate::{MMRStore, Merge, Result, MMR};
+use crate::{MMRStore, Merge, MerkleProof, Result, MMR};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -69,5 +69,10 @@ impl<T: Clone + Debug + PartialEq, M: Merge<Item = T>> MemMMR<T, M> {
         self.mmr_size = mmr.mmr_size();
         mmr.commit()?;
         Ok(pos)
+    }
+
+    pub fn gen_proof(&self, pos: u64) -> Result<MerkleProof<T, M>> {
+        let mmr = MMR::<T, M, &MemStore<T>>::new(self.mmr_size, &self.store);
+        mmr.gen_proof(pos)
     }
 }
