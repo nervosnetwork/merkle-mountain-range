@@ -162,6 +162,14 @@ impl<T: PartialEq + Debug, M: Merge<Item = T>> MerkleProof<T, M> {
         }
     }
 
+    pub fn mmr_size(&self) -> u64 {
+        self.mmr_size
+    }
+
+    pub fn proof_items(&self) -> &[T] {
+        &self.proof
+    }
+
     pub fn verify(&self, root: T, mut pos: u64, elem: T) -> Result<bool> {
         let peaks = get_peaks(self.mmr_size);
         let mut sum_elem = elem;
