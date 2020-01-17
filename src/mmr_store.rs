@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{vec::Vec, Result};
 
 #[derive(Default)]
 pub struct MMRBatch<Elem, Store: MMRStore<Elem>> {
@@ -45,7 +45,7 @@ impl<Elem: Clone, Store: MMRStore<Elem>> MMRBatch<Elem, Store> {
 
 impl<Elem, Store: MMRStore<Elem>> IntoIterator for MMRBatch<Elem, Store> {
     type Item = (u64, Vec<Elem>);
-    type IntoIter = ::std::vec::IntoIter<Self::Item>;
+    type IntoIter = crate::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.memory_batch.into_iter()

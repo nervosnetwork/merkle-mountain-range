@@ -1,11 +1,11 @@
-use crate::{MMRStore, Merge, MerkleProof, Result, MMR};
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::marker::PhantomData;
+use crate::collections::BTreeMap;
+use crate::{vec::Vec, MMRStore, Merge, MerkleProof, Result, MMR};
+use core::cell::RefCell;
+use core::fmt::Debug;
+use core::marker::PhantomData;
 
 #[derive(Clone)]
-pub struct MemStore<T>(RefCell<HashMap<u64, T>>);
+pub struct MemStore<T>(RefCell<BTreeMap<u64, T>>);
 
 impl<T> Default for MemStore<T> {
     fn default() -> Self {
@@ -15,7 +15,7 @@ impl<T> Default for MemStore<T> {
 
 impl<T> MemStore<T> {
     fn new() -> Self {
-        MemStore(RefCell::new(HashMap::new()))
+        MemStore(RefCell::new(Default::default()))
     }
 }
 

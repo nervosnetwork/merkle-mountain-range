@@ -7,8 +7,13 @@ license = "MIT"
 description = "A generalized merkle mountain range implementation"
 repository = "https://github.com/nervosnetwork/merkle-mountain-range"
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
 failure = "0.1.5"
+cfg-if = "0.1"
 
 [dev-dependencies]
 faster-hex = "0.3"
