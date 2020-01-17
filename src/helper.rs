@@ -1,5 +1,14 @@
 use crate::vec::Vec;
 
+fn log2(mut n: u64) -> u64 {
+    let mut k = 0;
+    while n > 1 {
+        k += 1;
+        n >>= 1;
+    }
+    k
+}
+
 pub fn leaf_index_to_pos(index: u64) -> u64 {
     if index == 0 {
         return 0;
@@ -10,7 +19,7 @@ pub fn leaf_index_to_pos(index: u64) -> u64 {
     let mut height = 0u32;
     while leaves > 1 {
         // get heighest peak height
-        height = (leaves as f64).log2() as u32;
+        height = log2(leaves) as u32;
         // calculate leaves in peak
         let peak_leaves = 1 << height;
         // heighest positon
