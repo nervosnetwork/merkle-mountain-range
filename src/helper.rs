@@ -1,3 +1,5 @@
+use crate::vec::Vec;
+
 pub fn leaf_index_to_pos(index: u64) -> u64 {
     if index == 0 {
         return 0;

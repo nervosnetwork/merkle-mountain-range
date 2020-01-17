@@ -1,5 +1,5 @@
 pub use failure::Fail;
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Fail, Debug, PartialEq, Eq, Clone)]
 pub enum Error {
@@ -8,5 +8,5 @@ pub enum Error {
     #[fail(display = "Inconsistent store")]
     InconsistentStore,
     #[fail(display = "Store error {}", _0)]
-    StoreError(String),
+    StoreError(crate::string::String),
 }

@@ -4,12 +4,13 @@
 //! https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#structure
 //! https://github.com/mimblewimble/grin/blob/0ff6763ee64e5a14e70ddd4642b99789a1648a32/core/src/core/pmmr.rs#L606
 
+use crate::borrow::Cow;
 use crate::helper::{get_peaks, parent_offset, pos_height_in_tree, sibling_offset};
 use crate::mmr_store::{MMRBatch, MMRStore};
+use crate::vec::Vec;
 use crate::{Error, Merge, Result};
-use std::borrow::Cow;
-use std::fmt::Debug;
-use std::marker::PhantomData;
+use core::fmt::Debug;
+use core::marker::PhantomData;
 
 pub struct MMR<T, M, S: MMRStore<T>> {
     mmr_size: u64,

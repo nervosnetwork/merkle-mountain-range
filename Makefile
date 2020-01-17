@@ -1,6 +1,6 @@
 default: ci
 
-ci: fmt clippy test bench-test
+ci: fmt check-no-std clippy test bench-test
 
 test:
 	cargo test --all --all-features
@@ -13,3 +13,6 @@ clippy:
 
 fmt:
 	cargo fmt --all -- --check
+
+check-no-std:
+	cargo check --all --no-default-features
