@@ -171,7 +171,7 @@ impl<T: PartialEq + Debug, M: Merge<Item = T>> MerkleProof<T, M> {
         &self.proof
     }
 
-    pub fn verify(&self, root: T, mut pos: u64, elem: T) -> Result<bool> {
+    pub fn calculate_root(&self, mut pos: u64, elem: T) -> Result<T> {
         let peaks = get_peaks(self.mmr_size);
         let mut sum_elem = elem;
         let mut height = 0;
@@ -211,6 +211,11 @@ impl<T: PartialEq + Debug, M: Merge<Item = T>> MerkleProof<T, M> {
                 M::merge(&proof, &sum_elem)
             };
         }
-        Ok(root == sum_elem)
+        Ok(sum_elem)
+    }
+
+    pub fn verify(&self, root: T, pos: u64, elem: T) -> Result<bool> {
+        self.calculate_root(pos, elem)
+            .map(|calculated_root| calculated_root == root)
     }
 }
