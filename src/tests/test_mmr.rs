@@ -1,5 +1,5 @@
 use super::{MergeNumberHash, NumberHash};
-use crate::{util::MemStore, Error, MMR};
+use crate::{leaf_index_to_mmr_size, util::MemStore, Error, MMR};
 use faster_hex::hex_string;
 use proptest::prelude::*;
 
@@ -22,6 +22,31 @@ fn test_mmr(count: u32, proof_elem: u32) {
         )
         .unwrap();
     assert!(result);
+}
+
+fn test_gen_new_root_from_proof(count: u32) {
+    let store = MemStore::default();
+    let mut mmr = MMR::<_, MergeNumberHash, _>::new(0, &store);
+    let positions: Vec<u64> = (0u32..count)
+        .map(|i| mmr.push(NumberHash::from(i)).unwrap())
+        .collect();
+    let elem = count - 1;
+    let pos = positions[elem as usize];
+    let proof = mmr.gen_proof(pos).expect("gen proof");
+    let new_elem = count;
+    let new_pos = mmr.push(NumberHash::from(new_elem)).unwrap();
+    let root = mmr.get_root().expect("get root");
+    mmr.commit().expect("commit changes");
+    let calculated_root = proof
+        .calculate_root_with_new_leaf(
+            pos,
+            NumberHash::from(elem),
+            new_pos,
+            NumberHash::from(new_elem),
+            leaf_index_to_mmr_size(new_elem.into()),
+        )
+        .unwrap();
+    assert_eq!(calculated_root, root);
 }
 
 #[test]
@@ -94,5 +119,10 @@ proptest! {
     #[test]
     fn test_random_mmr((count , elem) in count_elem(500)) {
         test_mmr(count, elem);
+    }
+
+    #[test]
+    fn test_random_gen_root_with_new_leaf(count in 1u32..500u32) {
+        test_gen_new_root_from_proof(count);
     }
 }

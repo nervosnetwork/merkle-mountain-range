@@ -7,6 +7,7 @@
 use crate::borrow::Cow;
 use crate::helper::{get_peaks, parent_offset, pos_height_in_tree, sibling_offset};
 use crate::mmr_store::{MMRBatch, MMRStore};
+use crate::vec;
 use crate::vec::Vec;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
@@ -171,51 +172,110 @@ impl<T: PartialEq + Debug, M: Merge<Item = T>> MerkleProof<T, M> {
         &self.proof
     }
 
-    pub fn calculate_root(&self, mut pos: u64, elem: T) -> Result<T> {
-        let peaks = get_peaks(self.mmr_size);
-        let mut sum_elem = elem;
-        let mut height = 0;
-        let mut proof_iter = self.proof.iter();
-        // calculate peak's merkle root
-        // start bagging peaks if pos reach a peak pos
-        while peaks.binary_search(&pos).is_err() {
-            let proof = match proof_iter.next() {
-                Some(proof) => proof,
-                None => break,
-            };
-            // verify merkle path
-            let pos_height = pos_height_in_tree(pos);
-            let next_height = pos_height_in_tree(pos + 1);
-            sum_elem = if next_height > pos_height {
-                // to next pos
-                pos += 1;
-                M::merge(proof, &sum_elem)
-            } else {
-                pos += parent_offset(height);
-                M::merge(&sum_elem, proof)
-            };
-            height += 1
-        }
+    pub fn calculate_root(&self, pos: u64, elem: T) -> Result<T> {
+        calculate_root::<_, M, _>(pos, elem, self.mmr_size, self.proof.iter())
+    }
 
-        // bagging peaks
-        // bagging with left peaks if pos is last peak(last pos)
-        let mut bagging_left = pos == self.mmr_size - 1;
-        for proof in &mut proof_iter {
-            sum_elem = if bagging_left {
-                M::merge(&sum_elem, &proof)
-            } else {
-                // we are not in the last peak, so bag with right peaks first
-                // notice the right peaks is already bagging into one hash in proof,
-                // so after this merge, the remain proofs are always left peaks.
-                bagging_left = true;
-                M::merge(&proof, &sum_elem)
-            };
+    /// from merkle proof of leaf n to calculate merkle root of n + 1 leaves.
+    /// by observe the MMR construction graph we know it is possible.
+    /// https://github.com/jjyr/merkle-mountain-range#construct
+    /// this is kinda tricky, but it works, and useful
+    pub fn calculate_root_with_new_leaf(
+        &self,
+        pos: u64,
+        elem: T,
+        new_pos: u64,
+        new_elem: T,
+        new_mmr_size: u64,
+    ) -> Result<T> {
+        if self.mmr_size == 0 {
+            return Ok(elem);
         }
-        Ok(sum_elem)
+        let pos_height = pos_height_in_tree(new_pos);
+        let next_height = pos_height_in_tree(new_pos + 1);
+
+        if next_height > pos_height {
+            // new elem on right branch
+            let new_proof = vec![elem];
+            let new_proof_iter = new_proof.iter().chain(self.proof.iter());
+            calculate_root::<_, M, _>(new_pos, new_elem, new_mmr_size, new_proof_iter)
+        } else {
+            // new elem on left branch
+            debug_assert_eq!(self.mmr_size + 1, new_mmr_size);
+            let peaks = get_peaks(self.mmr_size);
+            let mut proof_iter = self.proof.iter();
+            let (root_elem, _) =
+                calculate_peak_root::<_, M, _>(pos, &peaks, elem, &mut proof_iter)?;
+            let new_proof = vec![root_elem];
+            let new_proof_iter = new_proof.iter().chain(proof_iter);
+            calculate_root::<_, M, _>(new_pos, new_elem, new_mmr_size, new_proof_iter)
+        }
     }
 
     pub fn verify(&self, root: T, pos: u64, elem: T) -> Result<bool> {
         self.calculate_root(pos, elem)
             .map(|calculated_root| calculated_root == root)
     }
+}
+
+fn calculate_peak_root<
+    'a,
+    T: 'a + PartialEq + Debug,
+    M: Merge<Item = T>,
+    I: Iterator<Item = &'a T>,
+>(
+    mut pos: u64,
+    peaks: &[u64],
+    elem: T,
+    proof_iter: &mut I,
+) -> Result<(T, u64)> {
+    let mut root_elem = elem;
+    let mut height = 0;
+    // calculate peak's merkle root
+    // start bagging peaks if pos reach a peak pos
+    while peaks.binary_search(&pos).is_err() {
+        let proof = match proof_iter.next() {
+            Some(proof) => proof,
+            None => break,
+        };
+        // verify merkle path
+        let pos_height = pos_height_in_tree(pos);
+        let next_height = pos_height_in_tree(pos + 1);
+        root_elem = if next_height > pos_height {
+            // to next pos
+            pos += 1;
+            M::merge(proof, &root_elem)
+        } else {
+            pos += parent_offset(height);
+            M::merge(&root_elem, proof)
+        };
+        height += 1
+    }
+    Ok((root_elem, pos))
+}
+
+fn calculate_root<'a, T: 'a + PartialEq + Debug, M: Merge<Item = T>, I: Iterator<Item = &'a T>>(
+    pos: u64,
+    elem: T,
+    mmr_size: u64,
+    mut proof_iter: I,
+) -> Result<T> {
+    let peaks = get_peaks(mmr_size);
+    let (mut root_elem, pos) = calculate_peak_root::<_, M, _>(pos, &peaks, elem, &mut proof_iter)?;
+
+    // bagging peaks
+    // bagging with left peaks if pos is last peak(last pos)
+    let mut bagging_left = pos == mmr_size - 1;
+    for proof in &mut proof_iter {
+        root_elem = if bagging_left {
+            M::merge(&root_elem, &proof)
+        } else {
+            // we are not in the last peak, so bag with right peaks first
+            // notice the right peaks is already bagging into one hash in proof,
+            // so after this merge, the remain proofs are always left peaks.
+            bagging_left = true;
+            M::merge(&proof, &root_elem)
+        };
+    }
+    Ok(root_elem)
 }
