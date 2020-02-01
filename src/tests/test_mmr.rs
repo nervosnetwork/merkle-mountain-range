@@ -2,8 +2,9 @@ use super::{MergeNumberHash, NumberHash};
 use crate::{leaf_index_to_mmr_size, util::MemStore, Error, MMR};
 use faster_hex::hex_string;
 use proptest::prelude::*;
+use rand::{seq::SliceRandom, thread_rng};
 
-fn test_mmr(count: u32, proof_elem: u32) {
+fn test_mmr(count: u32, proof_elem: Vec<u32>) {
     let store = MemStore::default();
     let mut mmr = MMR::<_, MergeNumberHash, _>::new(0, &store);
     let positions: Vec<u64> = (0u32..count)
@@ -11,14 +12,21 @@ fn test_mmr(count: u32, proof_elem: u32) {
         .collect();
     let root = mmr.get_root().expect("get root");
     let proof = mmr
-        .gen_proof(positions[proof_elem as usize])
+        .gen_proof(
+            proof_elem
+                .iter()
+                .map(|elem| positions[*elem as usize])
+                .collect(),
+        )
         .expect("gen proof");
     mmr.commit().expect("commit changes");
     let result = proof
         .verify(
             root,
-            positions[proof_elem as usize],
-            NumberHash::from(proof_elem),
+            proof_elem
+                .iter()
+                .map(|elem| (positions[*elem as usize], NumberHash::from(*elem)))
+                .collect(),
         )
         .unwrap();
     assert!(result);
@@ -32,15 +40,14 @@ fn test_gen_new_root_from_proof(count: u32) {
         .collect();
     let elem = count - 1;
     let pos = positions[elem as usize];
-    let proof = mmr.gen_proof(pos).expect("gen proof");
+    let proof = mmr.gen_proof(vec![pos]).expect("gen proof");
     let new_elem = count;
     let new_pos = mmr.push(NumberHash::from(new_elem)).unwrap();
     let root = mmr.get_root().expect("get root");
     mmr.commit().expect("commit changes");
     let calculated_root = proof
         .calculate_root_with_new_leaf(
-            pos,
-            NumberHash::from(elem),
+            vec![(pos, NumberHash::from(elem))],
             new_pos,
             NumberHash::from(new_elem),
             leaf_index_to_mmr_size(new_elem.into()),
@@ -73,38 +80,64 @@ fn test_empty_mmr_root() {
 
 #[test]
 fn test_mmr_3_peaks() {
-    test_mmr(11, 5);
+    test_mmr(11, vec![5]);
 }
 
 #[test]
 fn test_mmr_2_peaks() {
-    test_mmr(10, 5);
+    test_mmr(10, vec![5]);
 }
 
 #[test]
 fn test_mmr_1_peak() {
-    test_mmr(8, 5);
+    test_mmr(8, vec![5]);
 }
 
 #[test]
 fn test_mmr_first_elem_proof() {
-    test_mmr(11, 0);
+    test_mmr(11, vec![0]);
 }
 
 #[test]
 fn test_mmr_last_elem_proof() {
-    test_mmr(11, 10);
+    test_mmr(11, vec![10]);
 }
 
 #[test]
 fn test_mmr_1_elem() {
-    test_mmr(1, 0);
+    test_mmr(1, vec![0]);
 }
 
 #[test]
 fn test_mmr_2_elems() {
-    test_mmr(2, 0);
-    test_mmr(2, 1);
+    test_mmr(2, vec![0]);
+    test_mmr(2, vec![1]);
+}
+
+#[test]
+fn test_mmr_2_leaves_merkle_proof() {
+    test_mmr(11, vec![3, 7]);
+    test_mmr(11, vec![3, 4]);
+}
+
+#[test]
+fn test_mmr_2_sibling_leaves_merkle_proof() {
+    test_mmr(11, vec![4, 5]);
+    test_mmr(11, vec![5, 6]);
+    test_mmr(11, vec![6, 7]);
+}
+
+#[test]
+fn test_mmr_3_leaves_merkle_proof() {
+    test_mmr(11, vec![4, 5, 6]);
+    test_mmr(11, vec![3, 5, 7]);
+    test_mmr(11, vec![3, 4, 5]);
+    test_mmr(100, vec![3, 5, 13]);
+}
+
+#[test]
+fn test_gen_root_from_proof() {
+    test_gen_new_root_from_proof(11);
 }
 
 prop_compose! {
@@ -117,8 +150,13 @@ prop_compose! {
 
 proptest! {
     #[test]
-    fn test_random_mmr((count , elem) in count_elem(500)) {
-        test_mmr(count, elem);
+    fn test_random_mmr(count in 10u32..500u32) {
+        let mut leaves: Vec<u32> = (0..count).collect();
+        let mut rng = thread_rng();
+        leaves.shuffle(&mut rng);
+        let leaves_count = rng.gen_range(1, count - 1);
+        leaves.truncate(leaves_count as usize);
+        test_mmr(count, leaves);
     }
 
     #[test]

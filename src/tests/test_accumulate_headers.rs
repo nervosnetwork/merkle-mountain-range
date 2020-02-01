@@ -156,7 +156,7 @@ impl Prover {
             mmr.get_root()?.serialize(),
             self.headers[later_number as usize].0.chain_root
         );
-        mmr.gen_proof(pos)
+        mmr.gen_proof(vec![pos])
     }
 
     fn get_pos(&self, number: u64) -> u64 {
@@ -188,6 +188,6 @@ fn test_insert_header() {
     let pos = leaf_index_to_pos(h1);
     assert_eq!(pos, prover.get_pos(h1));
     assert_eq!(prove_elem, (&prover.store).get_elem(pos).unwrap().unwrap());
-    let result = proof.verify(root, pos, prove_elem).expect("verify");
+    let result = proof.verify(root, vec![(pos, prove_elem)]).expect("verify");
     assert!(result);
 }

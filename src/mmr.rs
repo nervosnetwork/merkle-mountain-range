@@ -5,6 +5,7 @@
 //! https://github.com/mimblewimble/grin/blob/0ff6763ee64e5a14e70ddd4642b99789a1648a32/core/src/core/pmmr.rs#L606
 
 use crate::borrow::Cow;
+use crate::collections::{btree_map::Entry, BTreeMap};
 use crate::helper::{get_peaks, parent_offset, pos_height_in_tree, sibling_offset};
 use crate::mmr_store::{MMRBatch, MMRStore};
 use crate::vec;
@@ -79,42 +80,52 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         } else if self.mmr_size == 1 {
             return self.batch.get_elem(0)?.ok_or(Error::InconsistentStore);
         }
-        let peaks = get_peaks(self.mmr_size);
-        self.bag_rhs_peaks(0, &peaks)?
-            .ok_or(Error::InconsistentStore)
+        let peaks: Vec<T> = get_peaks(self.mmr_size)
+            .into_iter()
+            .map(|peak_pos| {
+                self.batch
+                    .get_elem(peak_pos)
+                    .and_then(|elem| elem.ok_or(Error::InconsistentStore))
+            })
+            .collect::<Result<Vec<T>>>()?;
+        self.bag_rhs_peaks(peaks)?.ok_or(Error::InconsistentStore)
     }
 
-    fn bag_rhs_peaks(&self, skip_peak_pos: u64, peaks: &[u64]) -> Result<Option<T>> {
-        let mut rhs_peak_elems: Vec<T> = peaks
-            .iter()
-            .filter(|&&p| p > skip_peak_pos)
-            .map(|&p| self.batch.get_elem(p))
-            .collect::<Result<Option<_>>>()?
-            .ok_or(Error::InconsistentStore)?;
-        while rhs_peak_elems.len() > 1 {
-            let right_peak = rhs_peak_elems.pop().expect("pop");
-            let left_peak = rhs_peak_elems.pop().expect("pop");
-            rhs_peak_elems.push(M::merge(&right_peak, &left_peak));
+    fn bag_rhs_peaks(&self, mut rhs_peaks: Vec<T>) -> Result<Option<T>> {
+        while rhs_peaks.len() > 1 {
+            let right_peak = rhs_peaks.pop().expect("pop");
+            let left_peak = rhs_peaks.pop().expect("pop");
+            rhs_peaks.push(M::merge(&right_peak, &left_peak));
         }
-        Ok(rhs_peak_elems.pop())
+        Ok(rhs_peaks.pop())
     }
 
-    pub fn gen_proof(&self, mut pos: u64) -> Result<MerkleProof<T, M>> {
-        let mut proof: Vec<T> = Vec::new();
-        let mut height = 0;
-        while pos < self.mmr_size {
+    fn build_sub_merkle_path(
+        &self,
+        mut pos: u64,
+        mut height: u32,
+        peak_pos: u64,
+        stop_pos: u64,
+        tree_buf: &BTreeMap<u64, u32>,
+        proof: &mut Vec<T>,
+    ) -> Result<(u64, u32)> {
+        while pos < peak_pos {
             let pos_height = pos_height_in_tree(pos);
             let next_height = pos_height_in_tree(pos + 1);
-            let (sib_pos, next_pos) = if next_height > pos_height {
+            let sib_pos = if next_height > pos_height {
                 // implies pos is right sibling
                 let sib_pos = pos - sibling_offset(height);
-                (sib_pos, pos + 1)
+                pos += 1;
+                sib_pos
             } else {
                 // pos is left sibling
                 let sib_pos = pos + sibling_offset(height);
-                (sib_pos, pos + parent_offset(height))
+                pos += parent_offset(height);
+                sib_pos
             };
-            if sib_pos > self.mmr_size - 1 {
+            height += 1;
+            if pos > stop_pos || tree_buf.contains_key(&pos) {
+                // means that current merkle path is complete
                 break;
             }
             proof.push(
@@ -122,24 +133,98 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
                     .get_elem(sib_pos)?
                     .ok_or(Error::InconsistentStore)?,
             );
-            pos = next_pos;
-            height += 1;
         }
-        // now we get peak merkle proof
-        let peak_pos = pos;
-        // calculate bagging proof
+        Ok((pos, height))
+    }
+
+    /// generate merkle proof for a peak
+    /// the pos_list must be sorted, otherwise the behaviour is undefined
+    ///
+    /// 1. find a lower tree in peak that can generate a complete merkle proof for position
+    /// 2. find that tree by compare positions
+    /// 3. generate proof for each positions
+    fn gen_proof_for_peak(
+        &self,
+        proof: &mut Vec<T>,
+        pos_list: Vec<u64>,
+        peak_pos: u64,
+    ) -> Result<()> {
+        // do nothing if position itself is the peak
+        if pos_list.len() == 1 && pos_list == [peak_pos] {
+            return Ok(());
+        }
+        // take peak root from store if no positions need to be proof
+        if pos_list.is_empty() {
+            proof.push(
+                self.batch
+                    .get_elem(peak_pos)?
+                    .ok_or(Error::InconsistentStore)?,
+            );
+            return Ok(());
+        }
+
+        // buf, positon -> height map
+        let mut tree_buf: BTreeMap<u64, u32> =
+            pos_list.into_iter().map(|pos| (pos, 0u32)).collect();
+        // Generate sub-tree merkle proof for positions
+        loop {
+            let (&pos, &height) = tree_buf.iter().next().unwrap();
+            tree_buf.remove(&pos);
+            debug_assert!(pos <= peak_pos);
+            if pos == peak_pos {
+                break;
+            }
+
+            let next_pos = *tree_buf
+                .iter()
+                .next()
+                .map(|(pos, _height)| pos)
+                .unwrap_or(&peak_pos);
+            let (pos, height) =
+                self.build_sub_merkle_path(pos, height, peak_pos, next_pos, &tree_buf, proof)?;
+            // save pos to tree buf
+            tree_buf.entry(pos).or_insert(height);
+        }
+        Ok(())
+    }
+
+    /// Generate merkle proof for positions
+    /// 1. sort positions
+    /// 2. push merkle proof to proof by peak from left to right
+    /// 3. push bagged right hand side root
+    pub fn gen_proof(&self, mut pos_list: Vec<u64>) -> Result<MerkleProof<T, M>> {
+        if pos_list.is_empty() {
+            return Err(Error::GenProofForInvalidLeaves);
+        }
+        if self.mmr_size == 1 && pos_list == [0] {
+            return Ok(MerkleProof::new(self.mmr_size, Vec::new()));
+        }
+        // ensure positions is sorted
+        pos_list.sort_unstable();
         let peaks = get_peaks(self.mmr_size);
-        if let Some(rhs_peak_hash) = self.bag_rhs_peaks(peak_pos, &peaks[..])? {
-            proof.push(rhs_peak_hash);
+        let mut proof: Vec<T> = Vec::new();
+        // generate merkle proof for each peaks
+        let mut bagging_track = 0;
+        for peak_pos in peaks {
+            let pos_list: Vec<_> = take_while_vec(&mut pos_list, |&pos| pos <= peak_pos);
+            if pos_list.is_empty() {
+                bagging_track += 1;
+            } else {
+                bagging_track = 0;
+            }
+            self.gen_proof_for_peak(&mut proof, pos_list, peak_pos)?;
         }
-        let lhs_peaks: Vec<_> = peaks
-            .iter()
-            .filter(|&&p| p < peak_pos)
-            .map(|&p| self.batch.get_elem(p))
-            .rev()
-            .collect::<Result<Option<_>>>()?
-            .ok_or(Error::InconsistentStore)?;
-        proof.extend(lhs_peaks);
+
+        // ensure no remain positions
+        if !pos_list.is_empty() {
+            return Err(Error::GenProofForInvalidLeaves);
+        }
+
+        if bagging_track > 1 {
+            let rhs_peaks = proof.split_off(proof.len() - bagging_track);
+            proof.push(self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks"));
+        }
+
         Ok(MerkleProof::new(self.mmr_size, proof))
     }
 
@@ -155,7 +240,7 @@ pub struct MerkleProof<T, M> {
     merge: PhantomData<M>,
 }
 
-impl<T: PartialEq + Debug, M: Merge<Item = T>> MerkleProof<T, M> {
+impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
     pub fn new(mmr_size: u64, proof: Vec<T>) -> Self {
         MerkleProof {
             mmr_size,
@@ -172,8 +257,8 @@ impl<T: PartialEq + Debug, M: Merge<Item = T>> MerkleProof<T, M> {
         &self.proof
     }
 
-    pub fn calculate_root(&self, pos: u64, elem: T) -> Result<T> {
-        calculate_root::<_, M, _>(pos, elem, self.mmr_size, self.proof.iter())
+    pub fn calculate_root(&self, leaves: Vec<(u64, T)>) -> Result<T> {
+        calculate_root::<_, M, _>(leaves, self.mmr_size, self.proof.iter())
     }
 
     /// from merkle proof of leaf n to calculate merkle root of n + 1 leaves.
@@ -182,100 +267,196 @@ impl<T: PartialEq + Debug, M: Merge<Item = T>> MerkleProof<T, M> {
     /// this is kinda tricky, but it works, and useful
     pub fn calculate_root_with_new_leaf(
         &self,
-        pos: u64,
-        elem: T,
+        mut leaves: Vec<(u64, T)>,
         new_pos: u64,
         new_elem: T,
         new_mmr_size: u64,
     ) -> Result<T> {
-        if self.mmr_size == 0 {
-            return Ok(elem);
-        }
         let pos_height = pos_height_in_tree(new_pos);
         let next_height = pos_height_in_tree(new_pos + 1);
-
         if next_height > pos_height {
-            // new elem on right branch
-            let new_proof = vec![elem];
-            let new_proof_iter = new_proof.iter().chain(self.proof.iter());
-            calculate_root::<_, M, _>(new_pos, new_elem, new_mmr_size, new_proof_iter)
+            let mut peaks_hashes =
+                calculate_peaks_hashes::<_, M, _>(leaves, self.mmr_size, self.proof.iter())?;
+            let peaks_pos = get_peaks(new_mmr_size);
+            // reverse touched peaks
+            let mut i = 0;
+            while peaks_pos[i] < new_pos {
+                i += 1
+            }
+            peaks_hashes[i..].reverse();
+            calculate_root::<_, M, _>(vec![(new_pos, new_elem)], new_mmr_size, peaks_hashes.iter())
         } else {
-            // new elem on left branch
-            debug_assert_eq!(self.mmr_size + 1, new_mmr_size);
-            let peaks = get_peaks(self.mmr_size);
-            let mut proof_iter = self.proof.iter();
-            let (root_elem, _) =
-                calculate_peak_root::<_, M, _>(pos, &peaks, elem, &mut proof_iter)?;
-            let new_proof = vec![root_elem];
-            let new_proof_iter = new_proof.iter().chain(proof_iter);
-            calculate_root::<_, M, _>(new_pos, new_elem, new_mmr_size, new_proof_iter)
+            leaves.push((new_pos, new_elem));
+            calculate_root::<_, M, _>(leaves, new_mmr_size, self.proof.iter())
         }
     }
 
-    pub fn verify(&self, root: T, pos: u64, elem: T) -> Result<bool> {
-        self.calculate_root(pos, elem)
+    pub fn verify(&self, root: T, leaves: Vec<(u64, T)>) -> Result<bool> {
+        self.calculate_root(leaves)
             .map(|calculated_root| calculated_root == root)
     }
 }
 
 fn calculate_peak_root<
     'a,
-    T: 'a + PartialEq + Debug,
+    T: 'a + PartialEq + Debug + Clone,
     M: Merge<Item = T>,
     I: Iterator<Item = &'a T>,
 >(
-    mut pos: u64,
-    peaks: &[u64],
-    elem: T,
+    leaves: Vec<(u64, T)>,
+    peak_pos: u64,
     proof_iter: &mut I,
-) -> Result<(T, u64)> {
-    let mut root_elem = elem;
-    let mut height = 0;
-    // calculate peak's merkle root
-    // start bagging peaks if pos reach a peak pos
-    while peaks.binary_search(&pos).is_err() {
-        let proof = match proof_iter.next() {
-            Some(proof) => proof,
-            None => break,
-        };
-        // verify merkle path
-        let pos_height = pos_height_in_tree(pos);
-        let next_height = pos_height_in_tree(pos + 1);
-        root_elem = if next_height > pos_height {
-            // to next pos
-            pos += 1;
-            M::merge(proof, &root_elem)
-        } else {
-            pos += parent_offset(height);
-            M::merge(&root_elem, proof)
-        };
-        height += 1
+) -> Result<T> {
+    debug_assert!(!leaves.is_empty(), "can't be empty");
+    // tree parent_pos -> sub tree root
+    let mut tree_buf: BTreeMap<u64, (T, u32)> = leaves
+        .into_iter()
+        .map(|(pos, item)| (pos, (item, 0u32)))
+        .collect();
+
+    // calculate tree root from each items
+    while !tree_buf.is_empty() {
+        let (pos, _item) = tree_buf.iter().next().unwrap();
+        let mut pos = *pos;
+        let (item, mut height) = tree_buf.remove(&pos).unwrap();
+        if pos == peak_pos {
+            // return root
+            return Ok(item);
+        }
+        let next_pos = tree_buf
+            .iter()
+            .next()
+            .map(|(pos, _item)| *pos)
+            .unwrap_or(peak_pos);
+        let mut item = item.clone();
+        while pos < peak_pos {
+            // verify merkle path
+            let pos_height = pos_height_in_tree(pos);
+            let next_height = pos_height_in_tree(pos + 1);
+            let is_right_side = next_height > pos_height;
+            if is_right_side {
+                // to next pos
+                pos += 1;
+            } else {
+                pos += parent_offset(height);
+            }
+            height += 1;
+            if pos > next_pos || tree_buf.contains_key(&pos) {
+                break;
+            }
+            let proof = proof_iter.next().ok_or(Error::CorruptedProof)?;
+            item = if is_right_side {
+                M::merge(proof, &item)
+            } else {
+                M::merge(&item, proof)
+            };
+        }
+        match tree_buf.entry(pos) {
+            Entry::Vacant(entry) => {
+                entry.insert((item, height));
+            }
+            Entry::Occupied(mut entry) => {
+                // exists a same parent node sibling, merge then update the slot
+                // note, we are always on right branch since the tree is calculated from left to right
+                item = M::merge(&entry.get().0, &item);
+                entry.insert((item, height));
+            }
+        }
     }
-    Ok((root_elem, pos))
+    Err(Error::CorruptedProof)
 }
 
-fn calculate_root<'a, T: 'a + PartialEq + Debug, M: Merge<Item = T>, I: Iterator<Item = &'a T>>(
-    pos: u64,
-    elem: T,
+fn calculate_peaks_hashes<
+    'a,
+    T: 'a + PartialEq + Debug + Clone,
+    M: Merge<Item = T>,
+    I: Iterator<Item = &'a T>,
+>(
+    mut leaves: Vec<(u64, T)>,
     mmr_size: u64,
     mut proof_iter: I,
-) -> Result<T> {
-    let peaks = get_peaks(mmr_size);
-    let (mut root_elem, pos) = calculate_peak_root::<_, M, _>(pos, &peaks, elem, &mut proof_iter)?;
-
-    // bagging peaks
-    // bagging with left peaks if pos is last peak(last pos)
-    let mut bagging_left = pos == mmr_size - 1;
-    for proof in &mut proof_iter {
-        root_elem = if bagging_left {
-            M::merge(&root_elem, &proof)
-        } else {
-            // we are not in the last peak, so bag with right peaks first
-            // notice the right peaks is already bagging into one hash in proof,
-            // so after this merge, the remain proofs are always left peaks.
-            bagging_left = true;
-            M::merge(&proof, &root_elem)
-        };
+) -> Result<Vec<T>> {
+    // special handle the only 1 leaf MMR
+    if mmr_size == 1 && leaves.len() == 1 && leaves[0].0 == 0 {
+        return Ok(leaves.into_iter().map(|(_pos, item)| item).collect());
     }
-    Ok(root_elem)
+    // sort items by position
+    leaves.sort_by_key(|(pos, _)| *pos);
+    let peaks = get_peaks(mmr_size);
+
+    let mut peaks_hashes: Vec<T> = Vec::with_capacity(peaks.len() + 1);
+    for peak_pos in peaks {
+        let mut leaves: Vec<_> = take_while_vec(&mut leaves, |(pos, _)| *pos <= peak_pos);
+        let peak_root = if leaves.len() == 1 && leaves[0].0 == peak_pos {
+            // leaf is the peak
+            leaves.remove(0).1
+        } else if leaves.is_empty() {
+            // if empty, means the next proof is a peak root or rhs bagged root
+            if let Some(peak_root) = proof_iter.next() {
+                peak_root.clone()
+            } else {
+                // means that either all right peaks are bagged, or proof is corrupted
+                // so we break loop and check no items left
+                break;
+            }
+        } else {
+            calculate_peak_root::<_, M, _>(leaves, peak_pos, &mut proof_iter)?
+        };
+        peaks_hashes.push(peak_root.clone());
+    }
+
+    // ensure nothing left in leaves
+    if !leaves.is_empty() {
+        return Err(Error::CorruptedProof);
+    }
+
+    // check rhs peaks
+    if let Some(rhs_peaks_hashes) = proof_iter.next() {
+        peaks_hashes.push(rhs_peaks_hashes.clone());
+    }
+    // ensure nothing left in proof_iter
+    if proof_iter.next().is_some() {
+        return Err(Error::CorruptedProof);
+    }
+    Ok(peaks_hashes)
+}
+
+fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T>>(
+    mut peaks_hashes: Vec<T>,
+) -> Result<T> {
+    // bagging peaks
+    // bagging from right to left via hash(right, left).
+    while peaks_hashes.len() > 1 {
+        let right_peak = peaks_hashes.pop().expect("pop");
+        let left_peak = peaks_hashes.pop().expect("pop");
+        peaks_hashes.push(M::merge(&right_peak, &left_peak));
+    }
+    peaks_hashes.pop().ok_or(Error::CorruptedProof)
+}
+
+/// merkle proof
+/// 1. sort items by position
+/// 2. calculate root of each peak
+/// 3. bagging peaks
+fn calculate_root<
+    'a,
+    T: 'a + PartialEq + Debug + Clone,
+    M: Merge<Item = T>,
+    I: Iterator<Item = &'a T>,
+>(
+    leaves: Vec<(u64, T)>,
+    mmr_size: u64,
+    proof_iter: I,
+) -> Result<T> {
+    let peaks_hashes = calculate_peaks_hashes::<_, M, _>(leaves, mmr_size, proof_iter)?;
+    bagging_peaks_hashes::<_, M>(peaks_hashes)
+}
+
+fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
+    for i in 0..v.len() {
+        if !p(&v[i]) {
+            return v.drain(..i).collect();
+        }
+    }
+    v.drain(..).collect()
 }
