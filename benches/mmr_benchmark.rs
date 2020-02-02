@@ -65,7 +65,7 @@ fn bench(c: &mut Criterion) {
         let (mmr_size, store, positions) = prepare_mmr(100_0000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
-        b.iter(|| mmr.gen_proof(*positions.choose(&mut rng).unwrap()));
+        b.iter(|| mmr.gen_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
     c.bench_function("MMR verify", |b| {
@@ -77,13 +77,15 @@ fn bench(c: &mut Criterion) {
             .map(|_| {
                 let pos = positions.choose(&mut rng).unwrap();
                 let elem = (&store).get_elem(*pos).unwrap().unwrap();
-                let proof = mmr.gen_proof(*pos).unwrap();
+                let proof = mmr.gen_proof(vec![*pos]).unwrap();
                 (pos, elem, proof)
             })
             .collect();
         b.iter(|| {
             let (pos, elem, proof) = proofs.choose(&mut rng).unwrap();
-            proof.verify(root.clone(), **pos, elem.clone()).unwrap();
+            proof
+                .verify(root.clone(), vec![(**pos, elem.clone())])
+                .unwrap();
         });
     });
 }

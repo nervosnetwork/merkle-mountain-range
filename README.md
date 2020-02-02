@@ -3,6 +3,14 @@
 
 A generalized merkle mountain range implementation.
 
+**Notice** this library is not stable yet, API and proof format may changes. Make sure you know what you do before using this library.
+
+## Features
+
+* Leaves accumulation
+* Multi leaves merkle proof
+* Accumulate from last leaf's merkle proof
+
 ## Construct
 
 ``` txt

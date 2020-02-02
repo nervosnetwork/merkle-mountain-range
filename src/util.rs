@@ -71,8 +71,8 @@ impl<T: Clone + Debug + PartialEq, M: Merge<Item = T>> MemMMR<T, M> {
         Ok(pos)
     }
 
-    pub fn gen_proof(&self, pos: u64) -> Result<MerkleProof<T, M>> {
+    pub fn gen_proof(&self, pos_list: Vec<u64>) -> Result<MerkleProof<T, M>> {
         let mmr = MMR::<T, M, &MemStore<T>>::new(self.mmr_size, &self.store);
-        mmr.gen_proof(pos)
+        mmr.gen_proof(pos_list)
     }
 }
