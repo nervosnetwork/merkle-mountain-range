@@ -5,7 +5,7 @@
 //! https://github.com/mimblewimble/grin/blob/0ff6763ee64e5a14e70ddd4642b99789a1648a32/core/src/core/pmmr.rs#L606
 
 use crate::borrow::Cow;
-use crate::collections::{btree_map::Entry, BTreeMap};
+use crate::collections::VecDeque;
 use crate::helper::{get_peaks, parent_offset, pos_height_in_tree, sibling_offset};
 use crate::mmr_store::{MMRBatch, MMRStore};
 use crate::vec;
@@ -100,43 +100,6 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         Ok(rhs_peaks.pop())
     }
 
-    fn build_sub_merkle_path(
-        &self,
-        mut pos: u64,
-        mut height: u32,
-        peak_pos: u64,
-        stop_pos: u64,
-        tree_buf: &BTreeMap<u64, u32>,
-        proof: &mut Vec<T>,
-    ) -> Result<(u64, u32)> {
-        while pos < peak_pos {
-            let pos_height = pos_height_in_tree(pos);
-            let next_height = pos_height_in_tree(pos + 1);
-            let sib_pos = if next_height > pos_height {
-                // implies pos is right sibling
-                let sib_pos = pos - sibling_offset(height);
-                pos += 1;
-                sib_pos
-            } else {
-                // pos is left sibling
-                let sib_pos = pos + sibling_offset(height);
-                pos += parent_offset(height);
-                sib_pos
-            };
-            height += 1;
-            if pos > stop_pos || tree_buf.contains_key(&pos) {
-                // means that current merkle path is complete
-                break;
-            }
-            proof.push(
-                self.batch
-                    .get_elem(sib_pos)?
-                    .ok_or(Error::InconsistentStore)?,
-            );
-        }
-        Ok((pos, height))
-    }
-
     /// generate merkle proof for a peak
     /// the pos_list must be sorted, otherwise the behaviour is undefined
     ///
@@ -163,27 +126,41 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
             return Ok(());
         }
 
-        // buf, positon -> height map
-        let mut tree_buf: BTreeMap<u64, u32> =
-            pos_list.into_iter().map(|pos| (pos, 0u32)).collect();
+        let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, 0u32)).collect();
         // Generate sub-tree merkle proof for positions
-        loop {
-            let (&pos, &height) = tree_buf.iter().next().unwrap();
-            tree_buf.remove(&pos);
+        while let Some((pos, height)) = queue.pop_front() {
             debug_assert!(pos <= peak_pos);
             if pos == peak_pos {
                 break;
             }
 
-            let next_pos = *tree_buf
-                .iter()
-                .next()
-                .map(|(pos, _height)| pos)
-                .unwrap_or(&peak_pos);
-            let (pos, height) =
-                self.build_sub_merkle_path(pos, height, peak_pos, next_pos, &tree_buf, proof)?;
-            // save pos to tree buf
-            tree_buf.entry(pos).or_insert(height);
+            // calculate sibling
+            let (sib_pos, parent_pos) = {
+                let next_height = pos_height_in_tree(pos + 1);
+                let sibling_offset = sibling_offset(height);
+                if next_height > height {
+                    // implies pos is right sibling
+                    (pos - sibling_offset, pos + 1)
+                } else {
+                    // pos is left sibling
+                    (pos + sibling_offset, pos + parent_offset(height))
+                }
+            };
+
+            if Some(&sib_pos) == queue.front().map(|(pos, _)| pos) {
+                // drop sibling
+                queue.pop_front();
+            } else {
+                proof.push(
+                    self.batch
+                        .get_elem(sib_pos)?
+                        .ok_or(Error::InconsistentStore)?,
+                );
+            }
+            if parent_pos < peak_pos {
+                // save pos to tree buf
+                queue.push_back((parent_pos, height + 1));
+            }
         }
         Ok(())
     }
@@ -308,59 +285,46 @@ fn calculate_peak_root<
     proof_iter: &mut I,
 ) -> Result<T> {
     debug_assert!(!leaves.is_empty(), "can't be empty");
-    // tree parent_pos -> sub tree root
-    let mut tree_buf: BTreeMap<u64, (T, u32)> = leaves
+    // (position, hash, height)
+    let mut queue: VecDeque<_> = leaves
         .into_iter()
-        .map(|(pos, item)| (pos, (item, 0u32)))
+        .map(|(pos, item)| (pos, item, 0u32))
         .collect();
 
     // calculate tree root from each items
-    while !tree_buf.is_empty() {
-        let (pos, _item) = tree_buf.iter().next().unwrap();
-        let mut pos = *pos;
-        let (item, mut height) = tree_buf.remove(&pos).unwrap();
+    while let Some((pos, item, height)) = queue.pop_front() {
         if pos == peak_pos {
             // return root
             return Ok(item);
         }
-        let next_pos = tree_buf
-            .iter()
-            .next()
-            .map(|(pos, _item)| *pos)
-            .unwrap_or(peak_pos);
-        let mut item = item.clone();
-        while pos < peak_pos {
-            // verify merkle path
-            let pos_height = pos_height_in_tree(pos);
-            let next_height = pos_height_in_tree(pos + 1);
-            let is_right_side = next_height > pos_height;
-            if is_right_side {
-                // to next pos
-                pos += 1;
+        // calculate sibling
+        let next_height = pos_height_in_tree(pos + 1);
+        let (sib_pos, parent_pos) = {
+            let sibling_offset = sibling_offset(height);
+            if next_height > height {
+                // implies pos is right sibling
+                (pos - sibling_offset, pos + 1)
             } else {
-                pos += parent_offset(height);
+                // pos is left sibling
+                (pos + sibling_offset, pos + parent_offset(height))
             }
-            height += 1;
-            if pos > next_pos || tree_buf.contains_key(&pos) {
-                break;
-            }
-            let proof = proof_iter.next().ok_or(Error::CorruptedProof)?;
-            item = if is_right_side {
-                M::merge(proof, &item)
-            } else {
-                M::merge(&item, proof)
-            };
-        }
-        match tree_buf.entry(pos) {
-            Entry::Vacant(entry) => {
-                entry.insert((item, height));
-            }
-            Entry::Occupied(mut entry) => {
-                // exists a same parent node sibling, merge then update the slot
-                // note, we are always on right branch since the tree is calculated from left to right
-                item = M::merge(&entry.get().0, &item);
-                entry.insert((item, height));
-            }
+        };
+        let sibling_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
+            queue.pop_front().map(|(_, item, _)| item).unwrap()
+        } else {
+            proof_iter.next().ok_or(Error::CorruptedProof)?.clone()
+        };
+
+        let parent_item = if next_height > height {
+            M::merge(&sibling_item, &item)
+        } else {
+            M::merge(&item, &sibling_item)
+        };
+
+        if parent_pos < peak_pos {
+            queue.push_back((parent_pos, parent_item, height + 1));
+        } else {
+            return Ok(parent_item);
         }
     }
     Err(Error::CorruptedProof)
