@@ -1,51 +1,18 @@
 use crate::vec::Vec;
 
-fn log2(mut n: u64) -> u64 {
-    let mut k = 0;
-    while n > 1 {
-        k += 1;
-        n >>= 1;
-    }
-    k
-}
-
 pub fn leaf_index_to_pos(index: u64) -> u64 {
-    if index == 0 {
-        return 0;
-    }
-    // leaf_count
-    let mut leaves = index + 1;
-    let mut tree_node_count = 0;
-    let mut height = 0u32;
-    while leaves > 1 {
-        // get heighest peak height
-        height = log2(leaves) as u32;
-        // calculate leaves in peak
-        let peak_leaves = 1 << height;
-        // heighest positon
-        let sub_tree_node_count = get_peak_pos_by_height(height) + 1;
-        tree_node_count += sub_tree_node_count;
-        leaves -= peak_leaves;
-    }
-    // two leaves can construct a new peak, the only valid number of leaves is 0 or 1.
-    debug_assert!(leaves == 0 || leaves == 1, "remain leaves incorrect");
-    if leaves == 1 {
-        // add one pos for remain leaf
-        // equals to `tree_node_count - 1 + 1`
-        tree_node_count
-    } else {
-        let pos = tree_node_count - 1;
-        pos - u64::from(height)
-    }
+    // mmr_size - H - 1, H is the height(intervals) of last peak
+    leaf_index_to_mmr_size(index) - (index + 1).trailing_zeros() as u64 - 1
 }
 
-// TODO optimize
 pub fn leaf_index_to_mmr_size(index: u64) -> u64 {
-    let mut pos = leaf_index_to_pos(index);
-    while pos_height_in_tree(pos + 1) > pos_height_in_tree(pos) {
-        pos += 1
-    }
-    pos + 1
+    // leaf index start with 0
+    let leaves_count = index + 1;
+
+    // the peak count(k) is actually the count of 1 in leaves count's binary representation
+    let peak_count = leaves_count.count_ones() as u64;
+
+    2 * leaves_count - peak_count
 }
 
 pub fn pos_height_in_tree(mut pos: u64) -> u32 {
