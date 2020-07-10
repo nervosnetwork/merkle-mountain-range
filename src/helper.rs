@@ -6,23 +6,11 @@ pub fn leaf_index_to_pos(index: u64) -> u64 {
 }
 
 pub fn leaf_index_to_mmr_size(index: u64) -> u64 {
-    // If leaves count is 2^p1 + 2^ p2 + ... + 2^pk (p1 > p2 > ... pk)
-    // the peak count(k) is actually the count of 1 in leaves count's binary representation
-    fn peak_count(block_count: u64) -> u64 {
-        let mut count = 0;
-        let mut number = block_count;
-
-        while 0 != number {
-            count = count + 1;
-            number = number & (number - 1);
-        }
-
-        count
-    }
-
-    // block number start with 0
+    // leaf index start with 0
     let leaves_count = index + 1;
-    let peak_count = peak_count(leaves_count);
+
+    // the peak count(k) is actually the count of 1 in leaves count's binary representation
+    let peak_count = leaves_count.count_ones() as u64;
 
     2 * leaves_count - peak_count
 }
