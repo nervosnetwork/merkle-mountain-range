@@ -13,6 +13,11 @@ use crate::vec::Vec;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
 use core::marker::PhantomData;
+use wasm_bindgen::prelude::*;
+use crate::leaf_index_to_pos;
+use sp_core::H256;
+use sp_runtime::traits::{BlakeTwo256, Hash};
+use serde_json::Value;
 
 pub struct MMR<T, M, S: MMRStore<T>> {
     mmr_size: u64,
@@ -20,7 +25,7 @@ pub struct MMR<T, M, S: MMRStore<T>> {
     merge: PhantomData<M>,
 }
 
-impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M, S> {
+impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item=T>, S: MMRStore<T>> MMR<T, M, S> {
     pub fn new(mmr_size: u64, store: S) -> Self {
         MMR {
             mmr_size,
@@ -217,7 +222,7 @@ pub struct MerkleProof<T, M> {
     merge: PhantomData<M>,
 }
 
-impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
+impl<T: PartialEq + Debug + Clone, M: Merge<Item=T>> MerkleProof<T, M> {
     pub fn new(mmr_size: u64, proof: Vec<T>) -> Self {
         MerkleProof {
             mmr_size,
@@ -277,8 +282,8 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
 fn calculate_peak_root<
     'a,
     T: 'a + PartialEq + Debug + Clone,
-    M: Merge<Item = T>,
-    I: Iterator<Item = &'a T>,
+    M: Merge<Item=T>,
+    I: Iterator<Item=&'a T>,
 >(
     leaves: Vec<(u64, T)>,
     peak_pos: u64,
@@ -333,8 +338,8 @@ fn calculate_peak_root<
 fn calculate_peaks_hashes<
     'a,
     T: 'a + PartialEq + Debug + Clone,
-    M: Merge<Item = T>,
-    I: Iterator<Item = &'a T>,
+    M: Merge<Item=T>,
+    I: Iterator<Item=&'a T>,
 >(
     mut leaves: Vec<(u64, T)>,
     mmr_size: u64,
@@ -385,7 +390,7 @@ fn calculate_peaks_hashes<
     Ok(peaks_hashes)
 }
 
-fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T>>(
+fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item=T>>(
     mut peaks_hashes: Vec<T>,
 ) -> Result<T> {
     // bagging peaks
@@ -405,8 +410,8 @@ fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T
 fn calculate_root<
     'a,
     T: 'a + PartialEq + Debug + Clone,
-    M: Merge<Item = T>,
-    I: Iterator<Item = &'a T>,
+    M: Merge<Item=T>,
+    I: Iterator<Item=&'a T>,
 >(
     leaves: Vec<(u64, T)>,
     mmr_size: u64,
@@ -423,4 +428,63 @@ fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
         }
     }
     v.drain(..).collect()
+}
+
+
+#[wasm_bindgen]
+pub fn convert(mmr_size: &str, mmr_proof: &str, leaf: &str) -> String {
+    let proof = mmr_proof[1..mmr_proof.len() - 1]
+        .split(", ")
+        .collect::<Vec<&str>>()
+        .iter()
+        .map(|&x| String::from(&x[2..]))
+        .collect::<Vec<String>>();
+
+    let leaves = vec![(
+        leaf_index_to_pos(0),
+        H256::from_slice(
+            &hex::decode(&leaf)
+                .unwrap()[..])
+    )];
+    let proof: Vec<H256> = proof
+        .iter()
+        .map(|x|
+            H256::from_slice(
+                &hex::decode(x)
+                    .unwrap()[..])
+        )
+        .collect();
+    let mut proof_hashes = proof.clone();
+    let peaks_hashes =
+        calculate_peaks_hashes::<H256, MMRMerge, _>(leaves.clone(), mmr_size.clone().parse().unwrap(), proof.iter()).unwrap();
+    proof_hashes.retain(|h| !contains(&peaks_hashes, h));
+    let peaks = peaks_hashes.iter().map(|hash| hash.to_string()).collect::<Vec<_>>().join(",");
+    let siblings = proof_hashes.iter().map(|hash| hash.to_string()).collect::<Vec<_>>().join(",");
+
+    return format!("{}|{}|{}", mmr_size, peaks, siblings);
+}
+
+pub struct MMRMerge;
+
+impl Merge for MMRMerge {
+    type Item = H256;
+    fn merge(lhs: &Self::Item, rhs: &Self::Item) -> Self::Item {
+        let encodable = (lhs, rhs);
+        BlakeTwo256::hash_of(&encodable)
+    }
+}
+
+
+fn contains(hashes: &Vec<H256>, target: &H256) -> bool {
+    hashes.iter().find(|&x| x == target).is_some()
+}
+
+#[wasm_bindgen]
+pub fn sum(x: i32, y: i32) -> i32 {
+    x + y
+}
+
+#[wasm_bindgen]
+pub fn print(x: &str) ->String {
+    x.to_string()
 }
