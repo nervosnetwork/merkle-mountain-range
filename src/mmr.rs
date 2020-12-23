@@ -17,7 +17,6 @@ use wasm_bindgen::prelude::*;
 use crate::leaf_index_to_pos;
 use sp_core::H256;
 use sp_runtime::traits::{BlakeTwo256, Hash};
-use serde_json::Value;
 
 pub struct MMR<T, M, S: MMRStore<T>> {
     mmr_size: u64,
@@ -432,7 +431,7 @@ fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
 
 
 #[wasm_bindgen]
-pub fn convert(mmr_size: &str, mmr_proof: &str, leaf: &str) -> String {
+pub fn convert(block_num: u64, mmr_size: &str, mmr_proof: &str, leaf: &str) -> String {
     let proof = mmr_proof[1..mmr_proof.len() - 1]
         .split(", ")
         .collect::<Vec<&str>>()
@@ -441,7 +440,7 @@ pub fn convert(mmr_size: &str, mmr_proof: &str, leaf: &str) -> String {
         .collect::<Vec<String>>();
 
     let leaves = vec![(
-        leaf_index_to_pos(0),
+        leaf_index_to_pos(block_num),
         H256::from_slice(
             &hex::decode(&leaf)
                 .unwrap()[..])
@@ -479,12 +478,9 @@ fn contains(hashes: &Vec<H256>, target: &H256) -> bool {
     hashes.iter().find(|&x| x == target).is_some()
 }
 
-#[wasm_bindgen]
-pub fn sum(x: i32, y: i32) -> i32 {
-    x + y
-}
 
-#[wasm_bindgen]
-pub fn print(x: &str) ->String {
-    x.to_string()
+#[test]
+fn test_convert() {
+    let c = convert(271475, "542954", "[0x91bcaaf0182d2a68cb26d61883abf3f352a681a4f53fbfa8e782502aac8756d0, 0x5eb822a9c78ac1e0e3c4c7ca1a7c15e47df67627b6a1cc94a39cd1bcc3ed0ed6, 0xe8851435697be9e0bdf6b58569581d3331b6b8ae2d624fc702c74d1ba5044d25, 0x029ce80dc5ba1f5e10da74d831563311b6d77f564f3c9036a682e9ea63cccafe, 0xba89e9b3e3524df5a80257e78fff815b501ed694c58696190292d05d235d1cbd, 0x32e33d3743aa1c8fb2dd02e397ae882745e57917a165031bd57334d89cbb9216, 0x5fcc7f36411473041fed141924da53cf31d1c9eabfc41eae3deb2d3b5052417d, 0x2193c7b130358d5d04e3c0f2f54988d51cac61de459bd44062600763f40ebb99, 0xa471a6aa13f5f34b70447d9381b7786ee55561aadebdabcae30c36491fac1396, 0x802029e8de6f0b99f574080313ae749b0787c82f73d13a5d69eed028eaff6169]", "b8d165cc6a13de707a646acd52b1f8d3d45ef6877b005ea3ae576937fe2e5822");
+    print!("{}", c)
 }
