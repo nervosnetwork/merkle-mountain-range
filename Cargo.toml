@@ -8,7 +8,7 @@ description = "A generalized merkle mountain range implementation"
 repository = "https://github.com/nervosnetwork/merkle-mountain-range"
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = false
+wasm-opt = ["-Oz", "--enable-mutable-globals"]
 
 [features]
 default = ["std"]

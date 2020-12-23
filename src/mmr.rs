@@ -431,34 +431,47 @@ fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
 
 
 #[wasm_bindgen]
-pub fn convert(block_num: u64, mmr_size: &str, mmr_proof: &str, leaf: &str) -> String {
-    let proof = mmr_proof[1..mmr_proof.len() - 1]
-        .split(", ")
-        .collect::<Vec<&str>>()
-        .iter()
-        .map(|&x| String::from(&x[2..]))
-        .collect::<Vec<String>>();
+pub fn convert(block_num: u64, mmr_size: u64, mmr_proof: &[u8], leaf: &[u8]) -> String {
+    // let block_num = 271475;
+    // let mmr_size = 542954;
+    // let mmr_proof1 = "[0x91bcaaf0182d2a68cb26d61883abf3f352a681a4f53fbfa8e782502aac8756d0, 0x5eb822a9c78ac1e0e3c4c7ca1a7c15e47df67627b6a1cc94a39cd1bcc3ed0ed6, 0xe8851435697be9e0bdf6b58569581d3331b6b8ae2d624fc702c74d1ba5044d25, 0x029ce80dc5ba1f5e10da74d831563311b6d77f564f3c9036a682e9ea63cccafe, 0xba89e9b3e3524df5a80257e78fff815b501ed694c58696190292d05d235d1cbd, 0x32e33d3743aa1c8fb2dd02e397ae882745e57917a165031bd57334d89cbb9216, 0x5fcc7f36411473041fed141924da53cf31d1c9eabfc41eae3deb2d3b5052417d, 0x2193c7b130358d5d04e3c0f2f54988d51cac61de459bd44062600763f40ebb99, 0xa471a6aa13f5f34b70447d9381b7786ee55561aadebdabcae30c36491fac1396, 0x802029e8de6f0b99f574080313ae749b0787c82f73d13a5d69eed028eaff6169]";
+    // let leaf1 = "b8d165cc6a13de707a646acd52b1f8d3d45ef6877b005ea3ae576937fe2e5822";
+
+    let mut proof = <Vec<H256>>::new();
+    for i in (0..mmr_proof.len()).step_by(32) {
+        let mut proof_ = [0; 32];
+        proof_.copy_from_slice(&mmr_proof[i..i + 32]);
+        proof.push(proof_.into());
+    }
+
+    // let proof = mmr_proof1[1..mmr_proof1.len() - 1]
+    //     .split(", ")
+    //     .collect::<Vec<&str>>()
+    //     .iter()
+    //     .map(|&x| String::from(&x[2..]))
+    //     .collect::<Vec<String>>();
 
     let leaves = vec![(
         leaf_index_to_pos(block_num),
-        H256::from_slice(
-            &hex::decode(&leaf)
-                .unwrap()[..])
+        {
+            let mut leaf_ = [0; 32];
+            leaf_.copy_from_slice(leaf);
+
+            leaf_.into()
+        }
     )];
-    let proof: Vec<H256> = proof
-        .iter()
-        .map(|x|
-            H256::from_slice(
-                &hex::decode(x)
-                    .unwrap()[..])
-        )
-        .collect();
+    // let proof: Vec<H256> = proof
+    //     .iter()
+    //     .map(|hash| hash.into()
+    //
+    //     )
+    //     .collect();
     let mut proof_hashes = proof.clone();
     let peaks_hashes =
-        calculate_peaks_hashes::<H256, MMRMerge, _>(leaves.clone(), mmr_size.clone().parse().unwrap(), proof.iter()).unwrap();
+        calculate_peaks_hashes::<H256, MMRMerge, _>(leaves.clone(), mmr_size, proof.iter()).unwrap();
     proof_hashes.retain(|h| !contains(&peaks_hashes, h));
-    let peaks = peaks_hashes.iter().map(|hash| hash.to_string()).collect::<Vec<_>>().join(",");
-    let siblings = proof_hashes.iter().map(|hash| hash.to_string()).collect::<Vec<_>>().join(",");
+    let peaks = peaks_hashes.iter().map(|hash| format!("{:?}", hash)).collect::<Vec<_>>().join(",");
+    let siblings = proof_hashes.iter().map(|hash| format!("{:?}", hash)).collect::<Vec<_>>().join(",");
 
     return format!("{}|{}|{}", mmr_size, peaks, siblings);
 }
@@ -481,6 +494,6 @@ fn contains(hashes: &Vec<H256>, target: &H256) -> bool {
 
 #[test]
 fn test_convert() {
-    let c = convert(271475, "542954", "[0x91bcaaf0182d2a68cb26d61883abf3f352a681a4f53fbfa8e782502aac8756d0, 0x5eb822a9c78ac1e0e3c4c7ca1a7c15e47df67627b6a1cc94a39cd1bcc3ed0ed6, 0xe8851435697be9e0bdf6b58569581d3331b6b8ae2d624fc702c74d1ba5044d25, 0x029ce80dc5ba1f5e10da74d831563311b6d77f564f3c9036a682e9ea63cccafe, 0xba89e9b3e3524df5a80257e78fff815b501ed694c58696190292d05d235d1cbd, 0x32e33d3743aa1c8fb2dd02e397ae882745e57917a165031bd57334d89cbb9216, 0x5fcc7f36411473041fed141924da53cf31d1c9eabfc41eae3deb2d3b5052417d, 0x2193c7b130358d5d04e3c0f2f54988d51cac61de459bd44062600763f40ebb99, 0xa471a6aa13f5f34b70447d9381b7786ee55561aadebdabcae30c36491fac1396, 0x802029e8de6f0b99f574080313ae749b0787c82f73d13a5d69eed028eaff6169]", "b8d165cc6a13de707a646acd52b1f8d3d45ef6877b005ea3ae576937fe2e5822");
+    let c = convert(271475, 542954, &[], "b8d165cc6a13de707a646acd52b1f8d3d45ef6877b005ea3ae576937fe2e5822");
     print!("{}", c)
 }
