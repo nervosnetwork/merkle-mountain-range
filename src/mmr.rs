@@ -7,16 +7,16 @@
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
 use crate::helper::{get_peaks, parent_offset, pos_height_in_tree, sibling_offset};
+use crate::leaf_index_to_pos;
 use crate::mmr_store::{MMRBatch, MMRStore};
 use crate::vec;
 use crate::vec::Vec;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
 use core::marker::PhantomData;
-use wasm_bindgen::prelude::*;
-use crate::leaf_index_to_pos;
 use sp_core::H256;
 use sp_runtime::traits::{BlakeTwo256, Hash};
+use wasm_bindgen::prelude::*;
 
 pub struct MMR<T, M, S: MMRStore<T>> {
     mmr_size: u64,
@@ -24,7 +24,7 @@ pub struct MMR<T, M, S: MMRStore<T>> {
     merge: PhantomData<M>,
 }
 
-impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item=T>, S: MMRStore<T>> MMR<T, M, S> {
+impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M, S> {
     pub fn new(mmr_size: u64, store: S) -> Self {
         MMR {
             mmr_size,
@@ -221,7 +221,7 @@ pub struct MerkleProof<T, M> {
     merge: PhantomData<M>,
 }
 
-impl<T: PartialEq + Debug + Clone, M: Merge<Item=T>> MerkleProof<T, M> {
+impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
     pub fn new(mmr_size: u64, proof: Vec<T>) -> Self {
         MerkleProof {
             mmr_size,
@@ -281,8 +281,8 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item=T>> MerkleProof<T, M> {
 fn calculate_peak_root<
     'a,
     T: 'a + PartialEq + Debug + Clone,
-    M: Merge<Item=T>,
-    I: Iterator<Item=&'a T>,
+    M: Merge<Item = T>,
+    I: Iterator<Item = &'a T>,
 >(
     leaves: Vec<(u64, T)>,
     peak_pos: u64,
@@ -337,8 +337,8 @@ fn calculate_peak_root<
 fn calculate_peaks_hashes<
     'a,
     T: 'a + PartialEq + Debug + Clone,
-    M: Merge<Item=T>,
-    I: Iterator<Item=&'a T>,
+    M: Merge<Item = T>,
+    I: Iterator<Item = &'a T>,
 >(
     mut leaves: Vec<(u64, T)>,
     mmr_size: u64,
@@ -389,7 +389,7 @@ fn calculate_peaks_hashes<
     Ok(peaks_hashes)
 }
 
-fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item=T>>(
+fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T>>(
     mut peaks_hashes: Vec<T>,
 ) -> Result<T> {
     // bagging peaks
@@ -409,8 +409,8 @@ fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item=T>>
 fn calculate_root<
     'a,
     T: 'a + PartialEq + Debug + Clone,
-    M: Merge<Item=T>,
-    I: Iterator<Item=&'a T>,
+    M: Merge<Item = T>,
+    I: Iterator<Item = &'a T>,
 >(
     leaves: Vec<(u64, T)>,
     mmr_size: u64,
@@ -429,49 +429,35 @@ fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
     v.drain(..).collect()
 }
 
-
 #[wasm_bindgen]
 pub fn convert(block_num: u64, mmr_size: u64, mmr_proof: &[u8], leaf: &[u8]) -> String {
-    // let block_num = 271475;
-    // let mmr_size = 542954;
-    // let mmr_proof1 = "[0x91bcaaf0182d2a68cb26d61883abf3f352a681a4f53fbfa8e782502aac8756d0, 0x5eb822a9c78ac1e0e3c4c7ca1a7c15e47df67627b6a1cc94a39cd1bcc3ed0ed6, 0xe8851435697be9e0bdf6b58569581d3331b6b8ae2d624fc702c74d1ba5044d25, 0x029ce80dc5ba1f5e10da74d831563311b6d77f564f3c9036a682e9ea63cccafe, 0xba89e9b3e3524df5a80257e78fff815b501ed694c58696190292d05d235d1cbd, 0x32e33d3743aa1c8fb2dd02e397ae882745e57917a165031bd57334d89cbb9216, 0x5fcc7f36411473041fed141924da53cf31d1c9eabfc41eae3deb2d3b5052417d, 0x2193c7b130358d5d04e3c0f2f54988d51cac61de459bd44062600763f40ebb99, 0xa471a6aa13f5f34b70447d9381b7786ee55561aadebdabcae30c36491fac1396, 0x802029e8de6f0b99f574080313ae749b0787c82f73d13a5d69eed028eaff6169]";
-    // let leaf1 = "b8d165cc6a13de707a646acd52b1f8d3d45ef6877b005ea3ae576937fe2e5822";
-
     let mut proof = <Vec<H256>>::new();
     for i in (0..mmr_proof.len()).step_by(32) {
         let mut proof_ = [0; 32];
         proof_.copy_from_slice(&mmr_proof[i..i + 32]);
         proof.push(proof_.into());
-    }
+	}
+    let leaves = vec![(leaf_index_to_pos(block_num), {
+        let mut leaf_ = [0; 32];
+        leaf_.copy_from_slice(leaf);
 
-    // let proof = mmr_proof1[1..mmr_proof1.len() - 1]
-    //     .split(", ")
-    //     .collect::<Vec<&str>>()
-    //     .iter()
-    //     .map(|&x| String::from(&x[2..]))
-    //     .collect::<Vec<String>>();
-
-    let leaves = vec![(
-        leaf_index_to_pos(block_num),
-        {
-            let mut leaf_ = [0; 32];
-            leaf_.copy_from_slice(leaf);
-
-            leaf_.into()
-        }
-    )];
-    // let proof: Vec<H256> = proof
-    //     .iter()
-    //     .map(|hash| hash.into()
-    //
-    //     )
-    //     .collect();
+        leaf_.into()
+    })];
     let mut proof_hashes = proof.clone();
     let peaks_hashes =
-        calculate_peaks_hashes::<H256, MMRMerge, _>(leaves.clone(), mmr_size, proof.iter()).unwrap();
+        calculate_peaks_hashes::<H256, MMRMerge, _>(leaves.clone(), mmr_size, proof.iter())
+            .unwrap();
     proof_hashes.retain(|h| !contains(&peaks_hashes, h));
-    let peaks = peaks_hashes.iter().map(|hash| format!("{:?}", hash)).collect::<Vec<_>>().join(",");
-    let siblings = proof_hashes.iter().map(|hash| format!("{:?}", hash)).collect::<Vec<_>>().join(",");
+    let peaks = peaks_hashes
+        .iter()
+        .map(|hash| format!("{:?}", hash))
+        .collect::<Vec<_>>()
+        .join(",");
+    let siblings = proof_hashes
+        .iter()
+        .map(|hash| format!("{:?}", hash))
+        .collect::<Vec<_>>()
+        .join(",");
 
     return format!("{}|{}|{}", mmr_size, peaks, siblings);
 }
@@ -486,14 +472,32 @@ impl Merge for MMRMerge {
     }
 }
 
-
 fn contains(hashes: &Vec<H256>, target: &H256) -> bool {
     hashes.iter().find(|&x| x == target).is_some()
 }
 
-
 #[test]
 fn test_convert() {
-    let c = convert(271475, 542954, &[], "b8d165cc6a13de707a646acd52b1f8d3d45ef6877b005ea3ae576937fe2e5822");
+    let mut proof = vec![];
+    for proof_hex_str in [
+        "0x91bcaaf0182d2a68cb26d61883abf3f352a681a4f53fbfa8e782502aac8756d0",
+        "0x5eb822a9c78ac1e0e3c4c7ca1a7c15e47df67627b6a1cc94a39cd1bcc3ed0ed6",
+        "0xe8851435697be9e0bdf6b58569581d3331b6b8ae2d624fc702c74d1ba5044d25",
+        "0x029ce80dc5ba1f5e10da74d831563311b6d77f564f3c9036a682e9ea63cccafe",
+        "0xba89e9b3e3524df5a80257e78fff815b501ed694c58696190292d05d235d1cbd",
+        "0x32e33d3743aa1c8fb2dd02e397ae882745e57917a165031bd57334d89cbb9216",
+        "0x5fcc7f36411473041fed141924da53cf31d1c9eabfc41eae3deb2d3b5052417d",
+        "0x2193c7b130358d5d04e3c0f2f54988d51cac61de459bd44062600763f40ebb99",
+        "0xa471a6aa13f5f34b70447d9381b7786ee55561aadebdabcae30c36491fac1396",
+        "0x802029e8de6f0b99f574080313ae749b0787c82f73d13a5d69eed028eaff6169",
+    ]
+    .iter()
+    {
+        proof.append(&mut array_bytes::bytes_unchecked(proof_hex_str));
+    }
+    let leaf = array_bytes::bytes_unchecked(
+        "b8d165cc6a13de707a646acd52b1f8d3d45ef6877b005ea3ae576937fe2e5822",
+    );
+    let c = convert(271475, 542954, &proof, &leaf);
     print!("{}", c)
 }
