@@ -38,7 +38,7 @@ For example, we insert a leaf to the example MMR:
 3. insert parent node to position `20`.
 4. the node `20` also has a left sibling `17`, calculate parent node: `merge(mmr[17], mmr[20])`.
 5. insert new node to next position `21`.
-6. the node `20` have no left sibling, complete the insertion.
+6. the node `21` have no left sibling, complete the insertion.
 
 Example MMR after insertion of a new leaf:
 
