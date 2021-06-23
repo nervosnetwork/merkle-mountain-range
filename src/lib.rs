@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 mod error;
-mod helper;
+pub mod helper;
 mod merge;
 mod mmr;
 mod mmr_store;
