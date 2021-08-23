@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate criterion;
 
-use criterion::Criterion;
+use criterion::{BenchmarkId, Criterion};
 
 use bytes::Bytes;
 use ckb_merkle_mountain_range::{util::MemStore, Error, MMRStore, Merge, Result, MMR};
@@ -53,13 +53,15 @@ fn prepare_mmr(count: u32) -> (u64, MemStore<NumberHash>, Vec<u64>) {
 }
 
 fn bench(c: &mut Criterion) {
-    c.bench_function_over_inputs(
-        "MMR insert",
-        |b, &&size| {
-            b.iter(|| prepare_mmr(size));
-        },
-        &[10_000, 100_000, 100_0000],
-    );
+    {
+        let mut group = c.benchmark_group("MMR insertion");
+        let inputs = [10_000, 100_000, 100_0000];
+        for input in inputs.iter() {
+            group.bench_with_input(BenchmarkId::new("times", input), &input, |b, &&size| {
+                b.iter(|| prepare_mmr(size));
+            });
+        }
+    }
 
     c.bench_function("MMR gen proof", |b| {
         let (mmr_size, store, positions) = prepare_mmr(100_0000);
