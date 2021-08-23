@@ -14,6 +14,7 @@ use crate::{Error, Merge, Result};
 use core::fmt::Debug;
 use core::marker::PhantomData;
 
+#[allow(clippy::upper_case_acronyms)]
 pub struct MMR<T, M, S: MMRStore<T>> {
     mmr_size: u64,
     batch: MMRBatch<T, S>,
