@@ -501,3 +501,72 @@ fn test_convert() {
     let c = convert(271475, 542954, &proof, &leaf);
     print!("{}", c)
 }
+
+#[test]
+fn test_peakBagging() {
+    let mut mmr_proof = vec![];
+    for proof_hex_str in [
+        "0xfc94dd28d893d7628d0c7769d2cc0a51354944305cb522570f2bb67fb5b0d37b",
+        "0x3dea9908a10d8e9cc807f93f65d55b4c7bf84d41c4dc0b4e70215332aeda483e",
+        "0x084631199357bd0e8a6ca232c3f77e08cba4989581ded276c7187ee30e800dc6",
+        "0xbe3541b92633bec4c5f66173e84e08bcacb45f731bb8e0afc837310db93e01c2",
+        "0x45b4492dc617494e67ea5de3883bcccb8a1fb4933ead9015943f2ef7ca56e0cc",
+        "0xb93c5bb679241d7142fdb43c2be2e6dd8abd49a236b317cfca7a033b2a1435fe",
+        "0x58fd8aef01e364a83edf9ffcd2f46668ce07e0881b0fab0e33f1fa696a9e4cbe",
+        "0x13e46905134952dcad7ea16f53c8c6cbef8730483f77424fc8482895898c3dbc",
+        "0x075fdc850bb7d1b4a47144725a7d2fe04135f3270b753d7bf5174a047cf4835b",
+        "0xe5c278613ee8455a215660ae20d8922b5db76735d8714bc78a709a1f12b071c4",
+        "0xb698b4fc3afc36de530c95e7f73ebef7929dc91b446fe401eb32af5684f92687",
+        "0x6137c159cee8c345652cbeb0e69cbefb7c4d5cd0f932a153c9979fc5c6ce3a66",
+        "0x8194ddd444c66b47862347d450c15f19ea969d468e692d1fd87a510dae666064",
+        "0xc2764c84ed2883fab1fa93d5bba4f97b10f7336b57876515115e0bd8ee35a83e",
+        "0x29af35fc65cf938f99326298e20c29f86c66fd9d5d7ab0578d00d9e69bd3ab02",
+        "0x00643a6a7a7760975b36d6d5eea9f07a96a40b3c36423d5686369ed01a856e93",
+        "0xcdd7e2712810c06fe356c163ceba267e8c7db40adc9d989527084831a739b277",
+        "0x277812899431a221ad7e155ab9d6373710b2ba2ecc07113cb50f2db25094fd76",
+        "0x256898cde8a0fd17496bb466a57bdd4acdf1cfb5fa4f3365093b0a6e819dda0c",
+        "0x02f3cac9bbb81d99b2c9c78fb76ddd192af6d0212f3d172c125225872dd2ff4f",
+        "0xd04985859b216d605ccb6f79ad4cbf7b28797205605d9b2e695f3140b2bc081d",
+    ]
+    .iter()
+    {
+        mmr_proof.append(&mut array_bytes::bytes_unchecked(proof_hex_str));
+    }
+
+    let leaf = array_bytes::bytes_unchecked(
+        "0x133fdb7f9459fda9a2420b5717643af2588b4eb305792b9615f31b4a610b8d34",
+    );
+
+    let expected_root = array_bytes::bytes_unchecked(
+        "0x9fb345285fbea92ce003fd982f60b52a65144953fac5d082ab45651d9525c80c",
+    );
+
+    let mut proof = <Vec<H256>>::new();
+    for i in (0..mmr_proof.len()).step_by(32) {
+        let mut proof_ = [0; 32];
+        proof_.copy_from_slice(&mmr_proof[i..i + 32]);
+        proof.push(proof_.into());
+    }
+    let leaves = vec![(leaf_index_to_pos(5689148), {
+        let mut leaf_ = [0; 32];
+        leaf_.copy_from_slice(&leaf);
+
+        leaf_.into()
+    })];
+    let mut proof_hashes = proof.clone();
+    let peaks_hashes =
+        calculate_peaks_hashes::<H256, MMRMerge, _>(leaves.clone(), 11445390, proof.iter())
+            .unwrap();
+
+    let root = bagging_peaks_hashes::<_, MMRMerge>(peaks_hashes).unwrap();
+
+    let mut expected_root_v = [0; 32];
+    expected_root_v.copy_from_slice(&expected_root);
+    // let c = convert(5689148, 11445390, &proof, &leaf);
+    assert_eq!(H256(expected_root_v), root);
+
+    let a_root = calculate_root::<_, MMRMerge, _>(leaves.clone(), 11445390, proof.iter()).unwrap();
+
+    assert_eq!(a_root, root);
+
+}
