@@ -96,7 +96,7 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         while rhs_peaks.len() > 1 {
             let right_peak = rhs_peaks.pop().expect("pop");
             let left_peak = rhs_peaks.pop().expect("pop");
-            rhs_peaks.push(M::merge(&right_peak, &left_peak));
+            rhs_peaks.push(M::merge_peaks(&right_peak, &left_peak));
         }
         Ok(rhs_peaks.pop())
     }
@@ -394,7 +394,7 @@ fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T
     while peaks_hashes.len() > 1 {
         let right_peak = peaks_hashes.pop().expect("pop");
         let left_peak = peaks_hashes.pop().expect("pop");
-        peaks_hashes.push(M::merge(&right_peak, &left_peak));
+        peaks_hashes.push(M::merge_peaks(&right_peak, &left_peak));
     }
     peaks_hashes.pop().ok_or(Error::CorruptedProof)
 }
