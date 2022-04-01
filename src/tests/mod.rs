@@ -1,6 +1,7 @@
 mod test_accumulate_headers;
 mod test_helper;
 mod test_mmr;
+mod test_sequence;
 
 use crate::Merge;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
