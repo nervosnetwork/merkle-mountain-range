@@ -31,13 +31,13 @@ struct MergeNumberHash;
 
 impl Merge for MergeNumberHash {
     type Item = NumberHash;
-    fn merge(lhs: &Self::Item, rhs: &Self::Item) -> Self::Item {
+    fn merge(lhs: &Self::Item, rhs: &Self::Item) -> Result<Self::Item> {
         let mut hasher = new_blake2b();
         let mut hash = [0u8; 32];
         hasher.update(&lhs.0);
         hasher.update(&rhs.0);
         hasher.finalize(&mut hash);
-        NumberHash(hash.to_vec().into())
+        Ok(NumberHash(hash.to_vec().into()))
     }
 }
 

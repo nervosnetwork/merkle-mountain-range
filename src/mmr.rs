@@ -63,7 +63,7 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
             let right_pos = left_pos + sibling_offset(height);
             let left_elem = self.find_elem(left_pos, &elems)?;
             let right_elem = self.find_elem(right_pos, &elems)?;
-            let parent_elem = M::merge(&left_elem, &right_elem);
+            let parent_elem = M::merge(&left_elem, &right_elem)?;
             elems.push(parent_elem);
             height += 1
         }
@@ -96,7 +96,7 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         while rhs_peaks.len() > 1 {
             let right_peak = rhs_peaks.pop().expect("pop");
             let left_peak = rhs_peaks.pop().expect("pop");
-            rhs_peaks.push(M::merge_peaks(&right_peak, &left_peak));
+            rhs_peaks.push(M::merge_peaks(&right_peak, &left_peak)?);
         }
         Ok(rhs_peaks.pop())
     }
@@ -320,7 +320,7 @@ fn calculate_peak_root<
             M::merge(&sibling_item, &item)
         } else {
             M::merge(&item, &sibling_item)
-        };
+        }?;
 
         if parent_pos < peak_pos {
             queue.push_back((parent_pos, parent_item, height + 1));
@@ -394,7 +394,7 @@ fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T
     while peaks_hashes.len() > 1 {
         let right_peak = peaks_hashes.pop().expect("pop");
         let left_peak = peaks_hashes.pop().expect("pop");
-        peaks_hashes.push(M::merge_peaks(&right_peak, &left_peak));
+        peaks_hashes.push(M::merge_peaks(&right_peak, &left_peak)?);
     }
     peaks_hashes.pop().ok_or(Error::CorruptedProof)
 }

@@ -9,6 +9,9 @@ pub enum Error {
     CorruptedProof,
     /// The leaves is an empty list, or beyond the mmr range
     GenProofForInvalidLeaves,
+
+    /// The two nodes couldn't merge into one.
+    MergeError(crate::string::String),
 }
 
 impl core::fmt::Display for Error {
@@ -20,6 +23,7 @@ impl core::fmt::Display for Error {
             StoreError(msg) => write!(f, "Store error {}", msg)?,
             CorruptedProof => write!(f, "Corrupted proof")?,
             GenProofForInvalidLeaves => write!(f, "Generate proof ofr invalid leaves")?,
+            MergeError(msg) => write!(f, "Merge error {}", msg)?,
         }
         Ok(())
     }
