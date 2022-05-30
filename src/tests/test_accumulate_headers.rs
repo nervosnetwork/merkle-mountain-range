@@ -72,17 +72,17 @@ struct MergeHashWithTD;
 
 impl Merge for MergeHashWithTD {
     type Item = HashWithTD;
-    fn merge(lhs: &Self::Item, rhs: &Self::Item) -> Self::Item {
+    fn merge(lhs: &Self::Item, rhs: &Self::Item) -> Result<Self::Item> {
         let mut hasher = new_blake2b();
         let mut hash = [0u8; 32];
         hasher.update(&lhs.serialize());
         hasher.update(&rhs.serialize());
         hasher.finalize(&mut hash);
         let td = lhs.td + rhs.td;
-        HashWithTD {
+        Ok(HashWithTD {
             hash: hash.to_vec().into(),
             td,
-        }
+        })
     }
 }
 
