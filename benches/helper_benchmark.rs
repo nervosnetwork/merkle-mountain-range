@@ -10,7 +10,7 @@ fn bench(c: &mut Criterion) {
     c.bench_function("left_index_to_pos", |b| {
         let mut rng = thread_rng();
         b.iter(|| {
-            let leaf_index = rng.gen_range(50_000_000_000, 70_000_000_000);
+            let leaf_index = rng.gen_range(50_000_000_000..70_000_000_000);
             leaf_index_to_pos(leaf_index);
         });
     });
@@ -18,7 +18,7 @@ fn bench(c: &mut Criterion) {
     c.bench_function("left_index_to_mmr_size", |b| {
         let mut rng = thread_rng();
         b.iter(|| {
-            let leaf_index = rng.gen_range(50_000_000_000, 70_000_000_000);
+            let leaf_index = rng.gen_range(50_000_000_000..70_000_000_000);
             leaf_index_to_mmr_size(leaf_index);
         });
     });
