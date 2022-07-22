@@ -1,7 +1,7 @@
 use super::new_blake2b;
 use crate::{leaf_index_to_pos, util::MemStore, MMRStore, Merge, MerkleProof, Result, MMR};
-use bytes::Bytes;
-use std::fmt::{self, Debug};
+use bytes::{Bytes, BytesMut};
+use std::fmt;
 
 #[derive(Clone)]
 struct Header {
@@ -42,9 +42,9 @@ struct HashWithTD {
 
 impl HashWithTD {
     fn serialize(&self) -> Bytes {
-        let mut data = self.hash.clone();
+        let mut data = BytesMut::from(self.hash.as_ref());
         data.extend(&self.td.to_le_bytes());
-        data
+        data.into()
     }
 
     fn deserialize(mut data: Bytes) -> Self {
@@ -57,12 +57,12 @@ impl HashWithTD {
     }
 }
 
-impl Debug for HashWithTD {
+impl fmt::Debug for HashWithTD {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
             "HashWithTD {{ hash: {}, td: {} }}",
-            faster_hex::hex_string(&self.hash).unwrap(),
+            faster_hex::hex_string(&self.hash),
             self.td
         )
     }

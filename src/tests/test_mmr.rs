@@ -64,7 +64,7 @@ fn test_mmr_root() {
         mmr.push(NumberHash::from(i)).unwrap();
     });
     let root = mmr.get_root().expect("get root");
-    let hex_root = hex_string(&root.0).unwrap();
+    let hex_root = hex_string(&root.0);
     assert_eq!(
         "f6794677f37a57df6a5ec36ce61036e43a36c1a009d05c81c9aa685dde1fd6e3",
         hex_root
@@ -154,7 +154,7 @@ proptest! {
         let mut leaves: Vec<u32> = (0..count).collect();
         let mut rng = thread_rng();
         leaves.shuffle(&mut rng);
-        let leaves_count = rng.gen_range(1, count - 1);
+        let leaves_count = rng.gen_range(1..count - 1);
         leaves.truncate(leaves_count as usize);
         test_mmr(count, leaves);
     }
