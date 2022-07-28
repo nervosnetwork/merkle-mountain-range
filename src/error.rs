@@ -7,6 +7,8 @@ pub enum Error {
     StoreError(crate::string::String),
     /// proof items is not enough to build a tree
     CorruptedProof,
+    /// tried to verify proof of a non-leaf
+    NodeProofsNotSupported,
     /// The leaves is an empty list, or beyond the mmr range
     GenProofForInvalidLeaves,
 
@@ -22,6 +24,7 @@ impl core::fmt::Display for Error {
             InconsistentStore => write!(f, "Inconsistent store")?,
             StoreError(msg) => write!(f, "Store error {}", msg)?,
             CorruptedProof => write!(f, "Corrupted proof")?,
+            NodeProofsNotSupported => write!(f, "Tried to verify membership of a non-leaf")?,
             GenProofForInvalidLeaves => write!(f, "Generate proof ofr invalid leaves")?,
             MergeError(msg) => write!(f, "Merge error {}", msg)?,
         }

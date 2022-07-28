@@ -58,6 +58,10 @@ impl<T: Clone + Debug + PartialEq, M: Merge<Item = T>> MemMMR<T, M> {
         &self.store
     }
 
+    pub fn mmr_size(&self) -> u64 {
+        self.mmr_size
+    }
+
     pub fn get_root(&self) -> Result<T> {
         let mmr = MMR::<T, M, &MemStore<T>>::new(self.mmr_size, &self.store);
         mmr.get_root()
