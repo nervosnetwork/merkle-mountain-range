@@ -15,7 +15,7 @@ use core::fmt::Debug;
 use core::marker::PhantomData;
 
 #[allow(clippy::upper_case_acronyms)]
-pub struct MMR<T, M, S: MMRStore<T>> {
+pub struct MMR<T, M, S> {
     mmr_size: u64,
     batch: MMRBatch<T, S>,
     merge: PhantomData<M>,
