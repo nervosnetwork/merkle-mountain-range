@@ -1,7 +1,7 @@
 use crate::{vec::Vec, Result};
 
 #[derive(Default)]
-pub struct MMRBatch<Elem, Store: MMRStore<Elem>> {
+pub struct MMRBatch<Elem, Store> {
     memory_batch: Vec<(u64, Vec<Elem>)>,
     store: Store,
 }
