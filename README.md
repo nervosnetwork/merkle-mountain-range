@@ -54,17 +54,17 @@ Example MMR after insertion of a new leaf:
 
 An MMR is constructed by one or more sub merkle trees (or mountains). Each sub merkle tree's root is a peak in MMR, we calculate the MMR root by bagging these peaks from right to left.
 
-For example, we have a MMR with 3 peaks: `14, 17, 18`, we bagging thses peaks from right to left to get the root: `merge(merge(mmr[18], mmr[17]), mmr[14])`.
+For example, in the 11 leaf MMR we have 3 peaks: `14, 17, 18`, we bag thses peaks from right to left to get the root: `merge(merge(mmr[18], mmr[17]), mmr[14])`.
 
 ## Merkle proof
 
-The merkle proof is an array of hashes constructed by the follows parts:
+The merkle proof is an array of hashes constructed with the following parts:
 
 1. A merkle proof from the leaf's sibling to the peak that contains the leaf.
-2. A hash that bagging all right-hand side peaks, skip this part if no right-hand peaks.
-3. Hashes of all left-hand peaks, the from right to left, skip this part if no left-hand peaks.
+2. A hash that bags all right-hand side peaks, skip this part if no right-hand peaks.
+3. Hashes of all left-hand peaks from right to left, skip this part if no left-hand peaks.
 
-We can reconstruct the merkle root from the proofs. Pre calculate the peaks positions from the size of MMR may help us do the bagging.
+We can reconstruct the merkle root from the proofs. Pre calculating the peak positions from the size of MMR may help us do the bagging.
 
 ## References
 
