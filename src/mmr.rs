@@ -177,8 +177,9 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         if self.mmr_size == 1 && pos_list == [0] {
             return Ok(MerkleProof::new(self.mmr_size, Vec::new()));
         }
-        // ensure positions is sorted
+        // ensure positions are sorted and unique
         pos_list.sort_unstable();
+        pos_list.dedup();
         let peaks = get_peaks(self.mmr_size);
         let mut proof: Vec<T> = Vec::new();
         // generate merkle proof for each peaks
@@ -345,8 +346,9 @@ fn calculate_peaks_hashes<
     if mmr_size == 1 && leaves.len() == 1 && leaves[0].0 == 0 {
         return Ok(leaves.into_iter().map(|(_pos, item)| item).collect());
     }
-    // sort items by position
+    // ensure leaves are sorted and unique
     leaves.sort_by_key(|(pos, _)| *pos);
+    leaves.dedup_by(|a, b| a.0 == b.0);
     let peaks = get_peaks(mmr_size);
 
     let mut peaks_hashes: Vec<T> = Vec::with_capacity(peaks.len() + 1);
