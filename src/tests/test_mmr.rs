@@ -140,6 +140,11 @@ fn test_gen_root_from_proof() {
     test_gen_new_root_from_proof(11);
 }
 
+#[test]
+fn test_gen_proof_with_duplicate_leaves() {
+    test_mmr(10, vec![5, 5]);
+}
+
 prop_compose! {
     fn count_elem(count: u32)
                 (elem in 0..count)
