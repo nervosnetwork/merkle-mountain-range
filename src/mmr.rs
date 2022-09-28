@@ -128,11 +128,16 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         }
 
         let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, 0u32)).collect();
+
         // Generate sub-tree merkle proof for positions
         while let Some((pos, height)) = queue.pop_front() {
             debug_assert!(pos <= peak_pos);
             if pos == peak_pos {
-                break;
+                if queue.is_empty() {
+                    break;
+                } else {
+                    return Err(Error::NodeProofsNotSupported);
+                }
             }
 
             // calculate sibling
@@ -176,6 +181,9 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         }
         if self.mmr_size == 1 && pos_list == [0] {
             return Ok(MerkleProof::new(self.mmr_size, Vec::new()));
+        }
+        if pos_list.iter().any(|pos| pos_height_in_tree(*pos) > 0) {
+            return Err(Error::NodeProofsNotSupported);
         }
         // ensure positions are sorted and unique
         pos_list.sort_unstable();
@@ -288,6 +296,7 @@ fn calculate_peak_root<
 ) -> Result<T> {
     debug_assert!(!leaves.is_empty(), "can't be empty");
     // (position, hash, height)
+
     let mut queue: VecDeque<_> = leaves
         .into_iter()
         .map(|(pos, item)| (pos, item, 0u32))
@@ -296,8 +305,12 @@ fn calculate_peak_root<
     // calculate tree root from each items
     while let Some((pos, item, height)) = queue.pop_front() {
         if pos == peak_pos {
-            // return root
-            return Ok(item);
+            if queue.is_empty() {
+                // return root once queue is consumed
+                return Ok(item);
+            } else {
+                return Err(Error::CorruptedProof);
+            }
         }
         // calculate sibling
         let next_height = pos_height_in_tree(pos + 1);
@@ -323,10 +336,10 @@ fn calculate_peak_root<
             M::merge(&item, &sibling_item)
         }?;
 
-        if parent_pos < peak_pos {
-            queue.push_back((parent_pos, parent_item, height + 1));
+        if parent_pos <= peak_pos {
+            queue.push_back((parent_pos, parent_item, height + 1))
         } else {
-            return Ok(parent_item);
+            return Err(Error::CorruptedProof);
         }
     }
     Err(Error::CorruptedProof)
@@ -342,6 +355,10 @@ fn calculate_peaks_hashes<
     mmr_size: u64,
     mut proof_iter: I,
 ) -> Result<Vec<T>> {
+    if leaves.iter().any(|(pos, _)| pos_height_in_tree(*pos) > 0) {
+        return Err(Error::NodeProofsNotSupported);
+    }
+
     // special handle the only 1 leaf MMR
     if mmr_size == 1 && leaves.len() == 1 && leaves[0].0 == 0 {
         return Ok(leaves.into_iter().map(|(_pos, item)| item).collect());
