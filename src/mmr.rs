@@ -21,7 +21,7 @@ pub struct MMR<T, M, S> {
     merge: PhantomData<M>,
 }
 
-impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M, S> {
+impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M, S> {
     pub fn new(mmr_size: u64, store: S) -> Self {
         MMR {
             mmr_size,
