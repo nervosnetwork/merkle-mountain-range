@@ -345,7 +345,7 @@ fn calculate_peak_root<
     Err(Error::CorruptedProof)
 }
 
-fn calculate_peaks_hashes<
+pub fn calculate_peaks_hashes<
     'a,
     T: 'a + PartialEq + Debug + Clone,
     M: Merge<Item = T>,
@@ -405,7 +405,7 @@ fn calculate_peaks_hashes<
     Ok(peaks_hashes)
 }
 
-fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T>>(
+pub(crate) fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T>>(
     mut peaks_hashes: Vec<T>,
 ) -> Result<T> {
     // bagging peaks
@@ -422,7 +422,7 @@ fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T
 /// 1. sort items by position
 /// 2. calculate root of each peak
 /// 3. bagging peaks
-fn calculate_root<
+pub(crate) fn calculate_root<
     'a,
     T: 'a + PartialEq + Debug + Clone,
     M: Merge<Item = T>,
@@ -436,7 +436,7 @@ fn calculate_root<
     bagging_peaks_hashes::<_, M>(peaks_hashes)
 }
 
-fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
+pub(crate) fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
     for i in 0..v.len() {
         if !p(&v[i]) {
             return v.drain(..i).collect();

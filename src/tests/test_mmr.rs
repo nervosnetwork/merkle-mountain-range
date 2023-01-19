@@ -1,10 +1,13 @@
 use super::{MergeNumberHash, NumberHash};
-use crate::{
-    helper::pos_height_in_tree, leaf_index_to_mmr_size, util::MemStore, Error, MMRStore, MMR,
-};
+use crate::mmr::{take_while_vec};
+use crate::{helper::pos_height_in_tree, leaf_index_to_mmr_size, util::MemStore, Error, MMRStore, Merge, MMR, mmr_position_to_k_index};
 use faster_hex::hex_string;
+use num::{Integer, Zero};
+use num::integer::div_floor;
 use proptest::prelude::*;
 use rand::{seq::SliceRandom, thread_rng};
+use tiny_keccak::keccak256;
+use crate::helper::get_peaks;
 
 fn test_mmr(count: u32, proof_elem: Vec<u32>) {
     let store = MemStore::default();
@@ -155,7 +158,7 @@ fn test_invalid_proof_verification(
     // optionally handroll proof from these positions
     handrolled_proof_positions: Option<Vec<u64>>,
 ) {
-    use crate::{util::MemMMR, Merge, MerkleProof};
+    use crate::{util::MemMMR, MerkleProof};
     use std::fmt::{Debug, Formatter};
 
     // Simple item struct to allow debugging the contents of MMR nodes/peaks
@@ -282,4 +285,244 @@ proptest! {
     fn test_random_gen_root_with_new_leaf(count in 1u32..500u32) {
         test_gen_new_root_from_proof(count);
     }
+}
+
+struct MergeKeccak;
+
+impl Merge for MergeKeccak {
+    type Item = NumberHash;
+    fn merge(lhs: &Self::Item, rhs: &Self::Item) -> Result<Self::Item, Error> {
+        let mut concat = vec![];
+        concat.extend(&lhs.0);
+        concat.extend(&rhs.0);
+        let hash = keccak256(&concat);
+        Ok(NumberHash(hash.to_vec().into()))
+    }
+}
+
+
+type Hash = [u8; 32];
+
+pub fn calculate_merkle_multi_root(proof: Vec<Vec<(usize, [u8; 32])>>) -> [u8; 32] {
+    let mut previous_layer = vec![];
+    for layer in proof {
+        let mut current_layer = vec![];
+        if previous_layer.len() == 0 {
+            current_layer = layer;
+        } else {
+            current_layer.extend(previous_layer.drain(..));
+            current_layer.extend(&layer);
+            current_layer.sort_by(|(a_i, _), (b_i, _)| a_i.cmp(b_i));
+        }
+
+        for index in (0..current_layer.len()).step_by(2) {
+            if index + 1 >= current_layer.len() {
+                let node = current_layer[index].clone();
+                previous_layer.push((div_floor(node.0, 2), node.1));
+            } else {
+                let mut concat = vec![];
+                let left = current_layer[index].clone();
+                let right = current_layer[index + 1].clone();
+                concat.extend(&left.1);
+                concat.extend(&right.1);
+                let hash = keccak256(&concat);
+
+                previous_layer.push((div_floor(left.0, 2), hash));
+            }
+        }
+    }
+
+    debug_assert_eq!(previous_layer.len(), 1);
+
+    previous_layer[0].1
+}
+
+fn sibling_indices(indices: Vec<usize>) -> Vec<usize> {
+    let mut siblings = Vec::new();
+
+    for index in indices {
+        let index = if index.is_zero() {
+            index + 1
+        } else if index.is_even() {
+            index + 1
+        } else {
+            index - 1
+        };
+        siblings.push(index);
+    }
+
+
+
+    siblings
+}
+
+fn parent_indices(indices: Vec<usize>) -> Vec<usize> {
+    let mut parents = Vec::new();
+
+
+    for index in indices {
+        let index = div_floor(index, 2);
+        parents.push(index);
+    }
+
+
+    parents
+}
+
+pub fn calculate_peak_roots(
+    mut leaves: Vec<(u64, usize, Hash)>,
+    mmr_size: u64,
+    mut proof_iter: Vec<Hash>,
+) -> Hash {
+    let peaks = get_peaks(mmr_size);
+    let mut peak_roots = vec![];
+
+    for peak in peaks {
+        let mut leaves: Vec<_> = take_while_vec(&mut leaves, |(pos, _, _)| *pos <= peak);
+
+        match leaves.len() {
+            1 if leaves[0].0 == peak => {
+                // this is a peak root.
+                peak_roots.push(leaves.pop().unwrap().2);
+            }
+            0 => {
+                // the next proof item is a peak
+                if let Some(peak) = proof_iter.pop() {
+                    peak_roots.push(peak)
+                } else {
+                    break;
+                }
+            }
+            _ => {
+
+                let leaves = leaves
+                    .into_iter()
+                    .map(|(_pos, index, leaf)| {
+                        (index, leaf)
+                    })
+                    .collect::<Vec<_>>();
+
+                let height = pos_height_in_tree(peak);
+                let mut current_layer: Vec<_> = leaves.iter().map(|(i, _)| *i).collect();
+                let mut layers: Vec<Vec<_>> = vec![];
+
+                for i in 0..height {
+                    let siblings = sibling_indices(current_layer.clone().drain(..).collect());
+                    let diff = difference(&siblings, &current_layer);
+                    if diff.len() == 0 {
+                        // fill the remaining layers
+                        layers.extend((i..height).map(|_| vec![]));
+                        break;
+                    }
+
+                    let len = diff.len();
+                    let proof = diff.into_iter().zip(proof_iter.drain(..len)).collect();
+                    layers.push(proof);
+                    current_layer = parent_indices(siblings);
+
+                    if i == 0 {
+                        // insert the leaves
+                        layers[0].extend(&leaves);
+                        layers[0].sort_by(|a, b| a.0.cmp(&b.0));
+                    }
+                }
+
+                let peak_root = calculate_merkle_multi_root(layers);
+                peak_roots.push(peak_root);
+            }
+        };
+    }
+
+    // bagging peaks
+    // bagging from right to left via hash(right, left).
+    while peak_roots.len() > 1 {
+        let right_peak = peak_roots.pop().expect("pop");
+        let left_peak = peak_roots.pop().expect("pop");
+        let mut buf = vec![];
+        buf.extend(&right_peak);
+        buf.extend(&left_peak);
+
+        peak_roots.push(keccak256(&buf));
+    }
+    peak_roots.pop().unwrap()
+}
+
+fn difference(right: &Vec<usize>, left: &Vec<usize>) -> Vec<usize> {
+    let mut out = vec![];
+
+    for item in right {
+        let mut found = false;
+        for i in left {
+            if item == i {
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            out.push(*item);
+        }
+
+    }
+    out
+}
+
+#[test]
+fn test_simplified_mmr_verification_algorithm() {
+    let store = MemStore::default();
+    let mut mmr = MMR::<_, MergeKeccak, _>::new(0, &store);
+    let positions: Vec<u64> = (0u32..=13)
+        .map(|i| mmr.push(NumberHash::from(i)).unwrap())
+        .collect();
+    let root = mmr.get_root().expect("get root");
+    let proof = mmr
+        .gen_proof(vec![
+            positions[2],
+            positions[5],
+            positions[8],
+            positions[10],
+            positions[12],
+        ])
+        .unwrap();
+
+    let leaves = vec![
+        (NumberHash::from(2), positions[2]),
+        (NumberHash::from(5), positions[5]),
+        (NumberHash::from(8), positions[8]),
+        (NumberHash::from(10), positions[10]),
+        (NumberHash::from(12), positions[12]),
+    ]
+        .into_iter()
+        .map(|(a, b)| (b, a))
+        .collect::<Vec<_>>();
+
+    let positions = leaves.iter().map(|(pos, _)| *pos).collect();
+    let pos_with_index = mmr_position_to_k_index(positions, proof.mmr_size());
+
+    let mut custom_leaves = pos_with_index
+        .into_iter()
+        .zip(leaves.clone())
+        .map(|((pos, index), (_, leaf))| {
+            let mut hash = [0u8; 32];
+            hash.copy_from_slice(&leaf.0);
+            (pos, index, hash)
+        })
+        .collect::<Vec<_>>();
+
+
+    custom_leaves.sort_by(|(a_pos, _, _), (b_pos, _, _)| a_pos.cmp(b_pos));
+
+    let nodes = proof
+        .proof_items()
+        .iter()
+        .map(|n| {
+            let mut buf = [0u8; 32];
+            buf.copy_from_slice(&n.0[..]);
+            buf
+        })
+        .collect();
+
+    let calculated = calculate_peak_roots(custom_leaves, proof.mmr_size(), nodes);
+
+    assert_eq!(calculated.to_vec(), root.0.to_vec());
 }
