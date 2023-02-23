@@ -1,7 +1,6 @@
 use crate::collections::BTreeMap;
-use crate::{vec::Vec, MMRStore, Merge, MerkleProof, Result, MMR};
+use crate::{vec::Vec, MMRStoreReadOps, MMRStoreWriteOps, Merge, MerkleProof, Result, MMR};
 use core::cell::RefCell;
-use core::fmt::Debug;
 use core::marker::PhantomData;
 
 #[derive(Clone)]
@@ -19,11 +18,13 @@ impl<T> MemStore<T> {
     }
 }
 
-impl<T: Clone> MMRStore<T> for &MemStore<T> {
+impl<T: Clone> MMRStoreReadOps<T> for &MemStore<T> {
     fn get_elem(&self, pos: u64) -> Result<Option<T>> {
         Ok(self.0.borrow().get(&pos).cloned())
     }
+}
 
+impl<T> MMRStoreWriteOps<T> for &MemStore<T> {
     fn append(&mut self, pos: u64, elems: Vec<T>) -> Result<()> {
         let mut store = self.0.borrow_mut();
         for (i, elem) in elems.into_iter().enumerate() {
@@ -39,13 +40,13 @@ pub struct MemMMR<T, M> {
     merge: PhantomData<M>,
 }
 
-impl<T: Clone + Debug + PartialEq, M: Merge<Item = T>> Default for MemMMR<T, M> {
+impl<T: Clone + PartialEq, M: Merge<Item = T>> Default for MemMMR<T, M> {
     fn default() -> Self {
         Self::new(0, Default::default())
     }
 }
 
-impl<T: Clone + Debug + PartialEq, M: Merge<Item = T>> MemMMR<T, M> {
+impl<T: Clone + PartialEq, M: Merge<Item = T>> MemMMR<T, M> {
     pub fn new(mmr_size: u64, store: MemStore<T>) -> Self {
         MemMMR {
             mmr_size,

@@ -1,6 +1,6 @@
 use super::{MergeNumberHash, NumberHash};
 use crate::{
-    helper::pos_height_in_tree, leaf_index_to_mmr_size, util::MemStore, Error, MMRStore, MMR,
+    helper::pos_height_in_tree, leaf_index_to_mmr_size, util::MemStore, Error, MMRStoreReadOps, MMR,
 };
 use faster_hex::hex_string;
 use proptest::prelude::*;

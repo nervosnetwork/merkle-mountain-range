@@ -6,7 +6,7 @@ pub struct MMRBatch<Elem, Store> {
     store: Store,
 }
 
-impl<Elem: Clone, Store: MMRStore<Elem>> MMRBatch<Elem, Store> {
+impl<Elem, Store> MMRBatch<Elem, Store> {
     pub fn new(store: Store) -> Self {
         MMRBatch {
             memory_batch: Vec::new(),
@@ -17,7 +17,9 @@ impl<Elem: Clone, Store: MMRStore<Elem>> MMRBatch<Elem, Store> {
     pub fn append(&mut self, pos: u64, elems: Vec<Elem>) {
         self.memory_batch.push((pos, elems));
     }
+}
 
+impl<Elem: Clone, Store: MMRStoreReadOps<Elem>> MMRBatch<Elem, Store> {
     pub fn get_elem(&self, pos: u64) -> Result<Option<Elem>> {
         for (start_pos, elems) in self.memory_batch.iter().rev() {
             if pos < *start_pos {
@@ -30,7 +32,9 @@ impl<Elem: Clone, Store: MMRStore<Elem>> MMRBatch<Elem, Store> {
         }
         self.store.get_elem(pos)
     }
+}
 
+impl<Elem, Store: MMRStoreWriteOps<Elem>> MMRBatch<Elem, Store> {
     pub fn commit(self) -> Result<()> {
         let Self {
             mut store,
@@ -43,7 +47,7 @@ impl<Elem: Clone, Store: MMRStore<Elem>> MMRBatch<Elem, Store> {
     }
 }
 
-impl<Elem, Store: MMRStore<Elem>> IntoIterator for MMRBatch<Elem, Store> {
+impl<Elem, Store> IntoIterator for MMRBatch<Elem, Store> {
     type Item = (u64, Vec<Elem>);
     type IntoIter = crate::vec::IntoIter<Self::Item>;
 
@@ -52,7 +56,10 @@ impl<Elem, Store: MMRStore<Elem>> IntoIterator for MMRBatch<Elem, Store> {
     }
 }
 
-pub trait MMRStore<Elem> {
+pub trait MMRStoreReadOps<Elem> {
     fn get_elem(&self, pos: u64) -> Result<Option<Elem>>;
+}
+
+pub trait MMRStoreWriteOps<Elem> {
     fn append(&mut self, pos: u64, elems: Vec<Elem>) -> Result<()>;
 }
