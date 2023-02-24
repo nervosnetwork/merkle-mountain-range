@@ -1,4 +1,3 @@
-use crate::vec;
 use crate::vec::Vec;
 
 pub fn leaf_index_to_pos(index: u64) -> u64 {
@@ -91,22 +90,55 @@ pub fn get_peak_map(mmr_size: u64) -> u64 {
 ///  / \   /  \
 /// 0   1 3   4
 pub fn get_peaks(mmr_size: u64) -> Vec<u64> {
-    if mmr_size == 0 {
-        return vec![];
-    }
+    PeakIterator::new(mmr_size).collect()
+}
 
-    let leading_zeros = mmr_size.leading_zeros();
-    let mut pos = mmr_size;
-    let mut peak_size = u64::MAX >> leading_zeros;
-    let mut peaks = Vec::with_capacity(64 - leading_zeros as usize);
-    let mut peaks_sum = 0;
-    while peak_size > 0 {
-        if pos >= peak_size {
-            pos -= peak_size;
-            peaks.push(peaks_sum + peak_size - 1);
-            peaks_sum += peak_size;
+pub struct PeakIterator {
+    pos: u64,
+    peak_size: u64,
+    peaks_sum: u64,
+}
+
+impl PeakIterator {
+    pub fn new(mmr_size: u64) -> Self {
+        if mmr_size == 0 {
+            return Self {
+                pos: 0,
+                peak_size: 0,
+                peaks_sum: 0,
+            };
         }
-        peak_size >>= 1;
+
+        let leading_zeros = mmr_size.leading_zeros();
+        let pos = mmr_size;
+        let peak_size = u64::MAX >> leading_zeros;
+        let peaks_sum = 0;
+
+        Self {
+            pos,
+            peak_size,
+            peaks_sum,
+        }
     }
-    peaks
+}
+
+impl Iterator for PeakIterator {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.peak_size > 0 {
+            let mut result = None;
+            if self.pos >= self.peak_size {
+                self.pos -= self.peak_size;
+                result = Some(self.peaks_sum + self.peak_size - 1);
+                self.peaks_sum += self.peak_size;
+            }
+            self.peak_size >>= 1;
+
+            if result.is_some() {
+                return result;
+            }
+        }
+        None
+    }
 }

@@ -11,6 +11,16 @@ pub enum Error {
     NodeProofsNotSupported,
     /// The leaves is an empty list, or beyond the mmr range
     GenProofForInvalidLeaves,
+    /// Compiled proof stack
+    CorruptedStack,
+    /// Compiled proof encountered invalid range
+    InvalidRange,
+    /// Invalid command in serialized proof
+    InvalidCommand(u8),
+    /// Unpack data is not long enough
+    UnpackEof,
+    /// Compiled proof can only work for sorted leaves
+    LeavesUnsorted,
 
     /// The two nodes couldn't merge into one.
     MergeError(crate::string::String),
@@ -26,6 +36,11 @@ impl core::fmt::Display for Error {
             CorruptedProof => write!(f, "Corrupted proof")?,
             NodeProofsNotSupported => write!(f, "Tried to verify membership of a non-leaf")?,
             GenProofForInvalidLeaves => write!(f, "Generate proof ofr invalid leaves")?,
+            CorruptedStack => write!(f, "Corrupted stack when running compiled proof")?,
+            InvalidRange => write!(f, "Compiling proof yields invalid range")?,
+            UnpackEof => write!(f, "Unpack data is not long enough")?,
+            LeavesUnsorted => write!(f, "Compiled proof can only work for sorted leaves")?,
+            InvalidCommand(c) => write!(f, "Invalid command {}", c)?,
             MergeError(msg) => write!(f, "Merge error {}", msg)?,
         }
         Ok(())
