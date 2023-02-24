@@ -6,7 +6,7 @@
 
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
-use crate::helper::{get_peaks, parent_offset, pos_height_in_tree, sibling_offset};
+use crate::helper::{get_peak_map, get_peaks, parent_offset, pos_height_in_tree, sibling_offset};
 use crate::mmr_store::{MMRBatch, MMRStoreReadOps, MMRStoreWriteOps};
 use crate::vec;
 use crate::vec::Vec;
@@ -52,22 +52,19 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
 
     // push a element and return position
     pub fn push(&mut self, elem: T) -> Result<u64> {
-        let mut elems: Vec<T> = Vec::new();
-        // position of new elem
+        let mut elems = vec![elem];
         let elem_pos = self.mmr_size;
-        elems.push(elem);
-        let mut height = 0u32;
-        let mut pos = elem_pos;
-        // continue to merge tree node if next pos heigher than current
-        while pos_height_in_tree(pos + 1) > height {
+        let peak_map = get_peak_map(self.mmr_size);
+        let mut pos = self.mmr_size;
+        let mut peak = 1;
+        while (peak_map & peak) != 0 {
+            peak <<= 1;
             pos += 1;
-            let left_pos = pos - parent_offset(height);
-            let right_pos = left_pos + sibling_offset(height);
+            let left_pos = pos - peak;
             let left_elem = self.find_elem(left_pos, &elems)?;
-            let right_elem = self.find_elem(right_pos, &elems)?;
-            let parent_elem = M::merge(&left_elem, &right_elem)?;
+            let right_elem = elems.last().expect("checked");
+            let parent_elem = M::merge(&left_elem, right_elem)?;
             elems.push(parent_elem);
-            height += 1
         }
         // store hashes
         self.batch.append(elem_pos, elems);
@@ -129,7 +126,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
             return Ok(());
         }
 
-        let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, 0u32)).collect();
+        let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, 0)).collect();
 
         // Generate sub-tree merkle proof for positions
         while let Some((pos, height)) = queue.pop_front() {
@@ -298,7 +295,7 @@ fn calculate_peak_root<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Item =
 
     let mut queue: VecDeque<_> = leaves
         .into_iter()
-        .map(|(pos, item)| (pos, item, 0u32))
+        .map(|(pos, item)| (pos, item, 0))
         .collect();
 
     // calculate tree root from each items
