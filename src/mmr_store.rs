@@ -17,6 +17,10 @@ impl<Elem, Store> MMRBatch<Elem, Store> {
     pub fn append(&mut self, pos: u64, elems: Vec<Elem>) {
         self.memory_batch.push((pos, elems));
     }
+
+    pub fn store(&self) -> &Store {
+        &self.store
+    }
 }
 
 impl<Elem: Clone, Store: MMRStoreReadOps<Elem>> MMRBatch<Elem, Store> {
@@ -35,13 +39,9 @@ impl<Elem: Clone, Store: MMRStoreReadOps<Elem>> MMRBatch<Elem, Store> {
 }
 
 impl<Elem, Store: MMRStoreWriteOps<Elem>> MMRBatch<Elem, Store> {
-    pub fn commit(self) -> Result<()> {
-        let Self {
-            mut store,
-            memory_batch,
-        } = self;
-        for (pos, elems) in memory_batch {
-            store.append(pos, elems)?;
+    pub fn commit(&mut self) -> Result<()> {
+        for (pos, elems) in self.memory_batch.drain(..) {
+            self.store.append(pos, elems)?;
         }
         Ok(())
     }
