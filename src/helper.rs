@@ -40,7 +40,7 @@ pub fn sibling_offset(height: u8) -> u64 {
 }
 
 /// Returns the height of the peaks in the mmr, presented by a bitmap.
-/// for example, for a mmr with 11 leaves, the mmr_size is 19, it will return 0b1010.
+/// for example, for a mmr with 11 leaves, the mmr_size is 19, it will return 0b1011.
 /// 0b1011 indicates that the left peaks are at height 0, 1 and 3.
 ///           14
 ///        /       \
