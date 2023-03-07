@@ -150,6 +150,46 @@ fn test_gen_proof_with_duplicate_leaves() {
     test_mmr(10, vec![5, 5]);
 }
 
+#[test]
+fn test_update_mmr() {
+    let count = 1234;
+
+    let root = {
+        let store = MemStore::default();
+        let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+        let positions: Vec<u64> = (0u32..count / 2)
+            .map(|i| mmr.push(NumberHash::from(i)).unwrap())
+            .collect();
+        assert!(positions.len() == count as usize / 2);
+
+        for (i, pos) in positions.into_iter().enumerate() {
+            if i % 3 == 1 {
+                mmr.update(pos, NumberHash::from(i as u32 * 3)).unwrap();
+            }
+        }
+
+        for i in count / 2..count {
+            mmr.push(NumberHash::from(i)).unwrap();
+        }
+        mmr.get_root().expect("get root")
+    };
+
+    let new_root = {
+        let store = MemStore::default();
+        let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+        (0u32..count).for_each(|i| {
+            if i % 3 == 1 && i < count / 2 {
+                mmr.push(NumberHash::from(i * 3)).unwrap();
+            } else {
+                mmr.push(NumberHash::from(i)).unwrap();
+            }
+        });
+        mmr.get_root().expect("get root")
+    };
+
+    assert_eq!(root, new_root);
+}
+
 fn test_invalid_proof_verification(
     leaf_count: u32,
     positions_to_verify: Vec<u64>,
