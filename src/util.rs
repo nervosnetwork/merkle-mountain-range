@@ -1,7 +1,6 @@
 use crate::collections::BTreeMap;
-use crate::{vec::Vec, MMRStoreReadOps, MMRStoreWriteOps, Merge, MerkleProof, Result, MMR};
+use crate::{vec::Vec, MMRStoreReadOps, MMRStoreWriteOps, Result, MMR};
 use core::cell::RefCell;
-use core::marker::PhantomData;
 
 #[derive(Clone)]
 pub struct MemStore<T>(RefCell<BTreeMap<u64, T>>);
@@ -34,50 +33,4 @@ impl<T> MMRStoreWriteOps<T> for &MemStore<T> {
     }
 }
 
-pub struct MemMMR<T, M> {
-    store: MemStore<T>,
-    mmr_size: u64,
-    merge: PhantomData<M>,
-}
-
-impl<T: Clone + PartialEq, M: Merge<Item = T>> Default for MemMMR<T, M> {
-    fn default() -> Self {
-        Self::new(0, Default::default())
-    }
-}
-
-impl<T: Clone + PartialEq, M: Merge<Item = T>> MemMMR<T, M> {
-    pub fn new(mmr_size: u64, store: MemStore<T>) -> Self {
-        MemMMR {
-            mmr_size,
-            store,
-            merge: PhantomData,
-        }
-    }
-
-    pub fn store(&self) -> &MemStore<T> {
-        &self.store
-    }
-
-    pub fn mmr_size(&self) -> u64 {
-        self.mmr_size
-    }
-
-    pub fn get_root(&self) -> Result<T> {
-        let mmr = MMR::<T, M, &MemStore<T>>::new(self.mmr_size, &self.store);
-        mmr.get_root()
-    }
-
-    pub fn push(&mut self, elem: T) -> Result<u64> {
-        let mut mmr = MMR::<T, M, &MemStore<T>>::new(self.mmr_size, &self.store);
-        let pos = mmr.push(elem)?;
-        self.mmr_size = mmr.mmr_size();
-        mmr.commit()?;
-        Ok(pos)
-    }
-
-    pub fn gen_proof(&self, pos_list: Vec<u64>) -> Result<MerkleProof<T, M>> {
-        let mmr = MMR::<T, M, &MemStore<T>>::new(self.mmr_size, &self.store);
-        mmr.gen_proof(pos_list)
-    }
-}
+pub type MemMMR<'a, T, M> = MMR<T, M, &'a MemStore<T>>;

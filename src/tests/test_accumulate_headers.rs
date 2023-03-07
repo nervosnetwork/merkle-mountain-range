@@ -106,7 +106,7 @@ impl Prover {
         let mut mmr = MMR::<_, MergeHashWithTD, _>::new(self.positions.len() as u64, &self.store);
         // get previous element
         let mut previous = if let Some(pos) = self.positions.last() {
-            MMRStoreReadOps::<_>::get_elem(&&self.store, *pos)?.expect("exists")
+            mmr.store().get_elem(*pos)?.expect("exists")
         } else {
             let genesis = Header::default();
 

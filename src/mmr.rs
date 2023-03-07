@@ -29,6 +29,22 @@ impl<T, M, S> MMR<T, M, S> {
             merge: PhantomData,
         }
     }
+
+    pub fn mmr_size(&self) -> u64 {
+        self.mmr_size
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.mmr_size == 0
+    }
+
+    pub fn batch(&self) -> &MMRBatch<T, S> {
+        &self.batch
+    }
+
+    pub fn store(&self) -> &S {
+        self.batch.store()
+    }
 }
 
 impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, S> {
@@ -40,14 +56,6 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         }
         let elem = self.batch.get_elem(pos)?.ok_or(Error::InconsistentStore)?;
         Ok(Cow::Owned(elem))
-    }
-
-    pub fn mmr_size(&self) -> u64 {
-        self.mmr_size
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.mmr_size == 0
     }
 
     // push a element and return position
@@ -216,7 +224,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
 }
 
 impl<T, M, S: MMRStoreWriteOps<T>> MMR<T, M, S> {
-    pub fn commit(self) -> Result<()> {
+    pub fn commit(&mut self) -> Result<()> {
         self.batch.commit()
     }
 }
