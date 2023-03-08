@@ -151,7 +151,7 @@ int _mmr_default_buffer_read_node(void *context, mmr_node_t *out) {
     return ERROR_NODE_EOF;
   }
   uint16_t len = *((uint16_t *)(&c->buffer[c->index]));
-  if (c->buffer_length - c->index < ((uint32_t ) 2) + len) {
+  if (c->buffer_length - c->index - ((uint32_t)2) < len) {
     return ERROR_NODE_EOF;
   }
   out->value.pointer = &c->buffer[c->index + 2];
@@ -317,6 +317,11 @@ int mmr_verify(const uint8_t *root, uint32_t root_length, uint64_t mmr_size,
   int has_last_leaf = 0;
   uint8_t command = 0xFF;
 
+  // We won't bother doing anything when mmr_size is 0.
+  if (mmr_size == 0) {
+    return ERROR_INVALID_PROOF;
+  }
+
   while (1) {
     int ret = MMR_COMMAND_READER(proof_reader_context, &command);
     if (ret == ERROR_NO_MORE_COMMANDS) {
@@ -340,6 +345,12 @@ int mmr_verify(const uint8_t *root, uint32_t root_length, uint64_t mmr_size,
         if (last_leaf_pos >= stack[stack_top].position) {
           return ERROR_INVALID_PROOF;
         }
+      }
+      if (stack[stack_top].position >= mmr_size) {
+        return ERROR_INVALID_PROOF;
+      }
+      if (_mmr_pos_height_in_tree(stack[stack_top].position) > 0) {
+        return ERROR_INVALID_PROOF;
       }
       stack[stack_top].t = _MMR_STACK_NODE;
       last_leaf_pos = stack[stack_top].position;
