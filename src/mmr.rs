@@ -45,8 +45,16 @@ impl<T, M, S> MMR<T, M, S> {
         &self.batch
     }
 
+    pub fn batch_mut(&mut self) -> &mut MMRBatch<T, S> {
+        &mut self.batch
+    }
+
     pub fn store(&self) -> &S {
         self.batch.store()
+    }
+
+    pub fn store_mut(&mut self) -> &mut S {
+        self.batch.store_mut()
     }
 }
 
