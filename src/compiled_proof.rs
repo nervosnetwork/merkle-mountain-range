@@ -310,7 +310,7 @@ enum StackItemType {
 }
 
 pub fn calculate_root<
-    T: PartialEq + Clone,
+    T,
     M: Merge<Item = T>,
     I: Iterator<Item = Result<Command<T>>>,
     IT: Iterator<Item = Result<(u64, T)>>,
@@ -341,7 +341,7 @@ pub fn calculate_root<
                 stack.push((leaf_item, pos, 0, StackItemType::Node));
             }
             Command::Proof(proof) => {
-                stack.push((proof.clone(), 0, 0, StackItemType::Proof));
+                stack.push((proof, 0, 0, StackItemType::Proof));
             }
             Command::Hash => {
                 if stack.len() < 2 {
@@ -418,11 +418,12 @@ pub fn calculate_root<
     if leaves.next().is_some() {
         return Err(Error::CorruptedProof);
     }
-    Ok(stack[0].0.clone())
+    let (root, _, _, _) = stack.pop().unwrap();
+    Ok(root)
 }
 
 pub fn verify<
-    T: PartialEq + Clone,
+    T: PartialEq,
     M: Merge<Item = T>,
     I: Iterator<Item = Result<Command<T>>>,
     IT: Iterator<Item = Result<(u64, T)>>,
