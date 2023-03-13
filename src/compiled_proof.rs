@@ -304,7 +304,7 @@ impl<'a, T: Packable> Iterator for PackedLeaves<'a, T> {
 
 #[derive(Clone, Debug, PartialEq)]
 enum StackItemType {
-    Node,
+    Node(u64, u8),
     Peak,
     Proof,
 }
@@ -323,7 +323,7 @@ pub fn calculate_root<
 
     let mut next_peak_info = PeakIterator::new(mmr_size);
     // let mut leaf_index = 0;
-    let mut stack: Vec<(T, u64, u8, StackItemType)> = Vec::with_capacity(257);
+    let mut stack: Vec<(T, StackItemType)> = Vec::with_capacity(257);
     for command in commands {
         match command? {
             Command::NextLeaf => {
@@ -338,24 +338,34 @@ pub fn calculate_root<
                     }
                 }
                 last_leaf_pos = Some(pos);
-                stack.push((leaf_item, pos, 0, StackItemType::Node));
+                stack.push((leaf_item, StackItemType::Node(pos, 0)));
             }
             Command::Proof(proof) => {
-                stack.push((proof, 0, 0, StackItemType::Proof));
+                stack.push((proof, StackItemType::Proof));
             }
             Command::Hash => {
                 if stack.len() < 2 {
                     return Err(Error::CorruptedStack);
                 }
-                let (rhs, rhs_pos, rhs_height, rhs_t) = stack.pop().unwrap();
-                let (lhs, lhs_pos, lhs_height, lhs_t) = stack.pop().unwrap();
-                let (pos, height, next_pos, next_t, item, sibling_item) =
-                    if lhs_t == StackItemType::Proof {
-                        // Swap lhs with rhs in case lhs is a proof
-                        (rhs_pos, rhs_height, lhs_pos, lhs_t, rhs, lhs)
-                    } else {
-                        (lhs_pos, lhs_height, rhs_pos, rhs_t, lhs, rhs)
-                    };
+                let (rhs, rhs_t) = stack.pop().unwrap();
+                let (lhs, lhs_t) = stack.pop().unwrap();
+                let (pos, height, next_pos, next_t, item, sibling_item) = match (lhs_t, &rhs_t) {
+                    (StackItemType::Proof, StackItemType::Node(rhs_pos, rhs_height)) => (
+                        *rhs_pos,
+                        *rhs_height,
+                        u64::MAX,
+                        StackItemType::Proof,
+                        rhs,
+                        lhs,
+                    ),
+                    (StackItemType::Node(lhs_pos, lhs_height), StackItemType::Node(rhs_pos, _)) => {
+                        (lhs_pos, lhs_height, *rhs_pos, rhs_t, lhs, rhs)
+                    }
+                    (StackItemType::Node(lhs_pos, lhs_height), StackItemType::Proof) => {
+                        (lhs_pos, lhs_height, u64::MAX, rhs_t, lhs, rhs)
+                    }
+                    _ => return Err(Error::CorruptedProof),
+                };
                 // calculate sibling
                 let next_height = pos_height_in_tree(pos + 1);
                 let (sib_pos, parent_pos) = {
@@ -376,15 +386,14 @@ pub fn calculate_root<
                 } else {
                     M::merge(&item, &sibling_item)
                 }?;
-                stack.push((parent_item, parent_pos, height + 1, StackItemType::Node));
+                stack.push((parent_item, StackItemType::Node(parent_pos, height + 1)));
             }
             Command::ToPeak => {
                 if stack.is_empty() {
                     return Err(Error::CorruptedStack);
                 }
-                let (item, pos, height, t) = stack.pop().unwrap();
-                // There's still error here
-                if t != StackItemType::Proof {
+                let (item, t) = stack.pop().unwrap();
+                if let StackItemType::Node(pos, _height) = t {
                     // For peak that contains at least 1 leaf node, we will
                     // look for a matching peak deduced from mmr_size, and
                     // abort if such a peak does not exist.
@@ -392,7 +401,7 @@ pub fn calculate_root<
                         return Err(Error::CorruptedProof);
                     }
                 }
-                stack.push((item, 0, height, StackItemType::Peak));
+                stack.push((item, StackItemType::Peak));
             }
             Command::HashPeak => {
                 if stack.len() < 2 {
@@ -400,15 +409,10 @@ pub fn calculate_root<
                 }
                 let top = stack.pop().unwrap();
                 let bottom = stack.pop().unwrap();
-                if top.3 != StackItemType::Peak || bottom.3 != StackItemType::Peak {
+                if top.1 != StackItemType::Peak || bottom.1 != StackItemType::Peak {
                     return Err(Error::CorruptedProof);
                 }
-                stack.push((
-                    M::merge_peaks(&top.0, &bottom.0)?,
-                    0,
-                    0,
-                    StackItemType::Peak,
-                ));
+                stack.push((M::merge_peaks(&top.0, &bottom.0)?, StackItemType::Peak));
             }
         }
     }
@@ -418,7 +422,7 @@ pub fn calculate_root<
     if leaves.next().is_some() {
         return Err(Error::CorruptedProof);
     }
-    let (root, _, _, _) = stack.pop().unwrap();
+    let (root, _) = stack.pop().unwrap();
     Ok(root)
 }
 
