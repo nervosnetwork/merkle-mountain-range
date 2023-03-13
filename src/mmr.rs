@@ -293,7 +293,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
     }
 }
 
-fn calculate_peak_root<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Item = &'a T>>(
+fn calculate_peak_root<'a, T: 'a, M: Merge<Item = T>, I: Iterator<Item = &'a T>>(
     leaves: Vec<(u64, T)>,
     peak_pos: u64,
     proof_iter: &mut I,
@@ -318,27 +318,34 @@ fn calculate_peak_root<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Item =
         }
         // calculate sibling
         let next_height = pos_height_in_tree(pos + 1);
-        let (sib_pos, parent_pos) = {
+        let (parent_pos, parent_item) = {
             let sibling_offset = sibling_offset(height);
             if next_height > height {
                 // implies pos is right sibling
-                (pos - sibling_offset, pos + 1)
+                let sib_pos = pos - sibling_offset;
+                let parent_pos = pos + 1;
+                let parent_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
+                    let sibling_item = queue.pop_front().map(|(_, item, _)| item).unwrap();
+                    M::merge(&sibling_item, &item)?
+                } else {
+                    let sibling_item = proof_iter.next().ok_or(Error::CorruptedProof)?;
+                    M::merge(sibling_item, &item)?
+                };
+                (parent_pos, parent_item)
             } else {
                 // pos is left sibling
-                (pos + sibling_offset, pos + parent_offset(height))
+                let sib_pos = pos + sibling_offset;
+                let parent_pos = pos + parent_offset(height);
+                let parent_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
+                    let sibling_item = queue.pop_front().map(|(_, item, _)| item).unwrap();
+                    M::merge(&item, &sibling_item)?
+                } else {
+                    let sibling_item = proof_iter.next().ok_or(Error::CorruptedProof)?;
+                    M::merge(&item, sibling_item)?
+                };
+                (parent_pos, parent_item)
             }
         };
-        let sibling_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
-            queue.pop_front().map(|(_, item, _)| item).unwrap()
-        } else {
-            proof_iter.next().ok_or(Error::CorruptedProof)?.clone()
-        };
-
-        let parent_item = if next_height > height {
-            M::merge(&sibling_item, &item)
-        } else {
-            M::merge(&item, &sibling_item)
-        }?;
 
         if parent_pos <= peak_pos {
             queue.push_back((parent_pos, parent_item, height + 1))
