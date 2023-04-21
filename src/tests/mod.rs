@@ -1,9 +1,10 @@
 mod test_accumulate_headers;
+mod test_compiled_proof;
 mod test_helper;
 mod test_mmr;
 mod test_sequence;
 
-use crate::{Merge, Result};
+use crate::{compiled_proof::Packable, Error, Merge, Result};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use bytes::Bytes;
 
@@ -20,6 +21,19 @@ impl From<u32> for NumberHash {
         hasher.update(&num.to_le_bytes());
         hasher.finalize(&mut hash);
         NumberHash(hash.to_vec().into())
+    }
+}
+
+impl Packable for NumberHash {
+    fn pack(&self) -> Result<Vec<u8>> {
+        Ok(self.0.to_vec())
+    }
+
+    fn unpack(data: &[u8]) -> Result<(Self, usize)> {
+        if data.len() < 32 {
+            return Err(Error::UnpackEof);
+        }
+        Ok((NumberHash(data[0..32].to_vec().into()), 32))
     }
 }
 

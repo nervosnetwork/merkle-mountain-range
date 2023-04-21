@@ -1,9 +1,12 @@
 default: ci
 
-ci: fmt check-no-std clippy test bench-test
+ci: fmt check-no-std clippy test bench-test c-test
 
 test:
 	cargo test --all --all-features
+
+c-test:
+	cd c/rust-tests && cargo test --all --all-features
 
 bench-test:
 	cargo bench -- --test

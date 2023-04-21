@@ -6,6 +6,7 @@
 
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
+use crate::compiled_proof::{compile_merkle_proof, CompiledMerkleProof, Value};
 use crate::helper::{get_peak_map, get_peaks, parent_offset, pos_height_in_tree, sibling_offset};
 use crate::mmr_store::{MMRBatch, MMRStoreReadOps, MMRStoreWriteOps};
 use crate::vec;
@@ -291,6 +292,13 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
         self.calculate_root(leaves)
             .map(|calculated_root| calculated_root == root)
     }
+
+    pub fn compile<VM: Merge<Item = Value<T>>>(
+        self,
+        pos_list: Vec<u64>,
+    ) -> Result<CompiledMerkleProof<T>> {
+        compile_merkle_proof::<_, VM>(self.mmr_size, self.proof, pos_list)
+    }
 }
 
 fn calculate_peak_root<'a, T: 'a, M: Merge<Item = T>, I: Iterator<Item = &'a T>>(
@@ -356,7 +364,12 @@ fn calculate_peak_root<'a, T: 'a, M: Merge<Item = T>, I: Iterator<Item = &'a T>>
     Err(Error::CorruptedProof)
 }
 
-fn calculate_peaks_hashes<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Item = &'a T>>(
+pub(crate) fn calculate_peaks_hashes<
+    'a,
+    T: 'a + Clone,
+    M: Merge<Item = T>,
+    I: Iterator<Item = &'a T>,
+>(
     mut leaves: Vec<(u64, T)>,
     mmr_size: u64,
     mut proof_iter: I,
