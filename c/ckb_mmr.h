@@ -212,11 +212,19 @@ uint64_t _mmr_count_zeros_u64(uint64_t value) {
 }
 #elif defined __has_builtin
 uint64_t _mmr_trailing_zeros_u64(uint64_t value) {
-  return __builtin_ctzl(value);
+  if (value != 0) {
+    return __builtin_ctzl(value);
+  } else {
+    return 64;
+  }
 }
 
 uint64_t _mmr_leading_zeros_u64(uint64_t value) {
-  return __builtin_clzl(value);
+  if (value != 0) {
+    return __builtin_clzl(value);
+  } else {
+    return 64;
+  }
 }
 
 uint64_t _mmr_count_zeros_u64(uint64_t value) {
