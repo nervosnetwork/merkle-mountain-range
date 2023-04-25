@@ -1,7 +1,10 @@
 mod test_accumulate_headers;
 mod test_helper;
 mod test_mmr;
+mod test_mmr_postfix_proof;
 mod test_sequence;
+
+use core::fmt::LowerHex;
 
 use crate::{Merge, Result};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
@@ -34,5 +37,12 @@ impl Merge for MergeNumberHash {
         hasher.update(&rhs.0);
         hasher.finalize(&mut hash);
         Ok(NumberHash(hash.to_vec().into()))
+    }
+}
+
+impl core::fmt::Display for NumberHash {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        self.0.fmt(f)?;
+        Ok(())
     }
 }

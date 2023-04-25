@@ -39,6 +39,18 @@ pub fn sibling_offset(height: u8) -> u64 {
     (2 << height) - 1
 }
 
+pub fn sibling_parent(pos: u64, height: u8) -> (u64, u64) {
+    let next_height = pos_height_in_tree(pos + 1);
+    let sibling_offset = sibling_offset(height);
+    if next_height > height {
+        // implies pos is right sibling
+        (pos - sibling_offset, pos + 1)
+    } else {
+        // pos is left sibling
+        (pos + sibling_offset, pos + parent_offset(height))
+    }
+}
+
 /// Returns the height of the peaks in the mmr, presented by a bitmap.
 /// for example, for a mmr with 11 leaves, the mmr_size is 19, it will return 0b1011.
 /// 0b1011 indicates that the left peaks are at height 0, 1 and 3.
