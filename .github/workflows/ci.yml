@@ -1,0 +1,51 @@
+name: Test Code
+
+on:
+  pull_request:
+    branches:
+      - master
+      - develop
+  push:
+    branches:
+      - master
+      - develop
+
+jobs:
+  test:
+    name: Merkle Mountain Range Postfix
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly-2023-03-14
+          components: rustfmt, clippy
+          target: wasm32-unknown-unknown
+          override: true
+          default: true
+
+      # Uncomment once linting issues have been fixed
+      # Enable this for clippy linting.
+      # - name: Check and Lint Code
+      #   run: cargo clippy -- -D warnings
+
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --check
+
+      - name: Run cargo check for release
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --release
+
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
