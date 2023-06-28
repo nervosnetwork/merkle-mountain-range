@@ -6,7 +6,10 @@
 
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
-use crate::helper::{get_peak_map, get_peaks, parent_offset, pos_height_in_tree, sibling_offset};
+use crate::helper::{
+    get_peak_map, get_peaks, leaf_index_to_mmr_size, leaf_index_to_pos, parent_offset,
+    pos_height_in_tree, sibling_offset,
+};
 use crate::mmr_store::{MMRBatch, MMRStoreReadOps, MMRStoreWriteOps};
 use crate::vec;
 use crate::vec::Vec;
@@ -290,6 +293,63 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
     pub fn verify(&self, root: T, leaves: Vec<(u64, T)>) -> Result<bool> {
         self.calculate_root(leaves)
             .map(|calculated_root| calculated_root == root)
+    }
+
+    /// Verifies a old root and all incremental leaves.
+    ///
+    /// If this method returns `true`, it means the following assertion are true:
+    /// - The old root could be generated in the history of the current MMR.
+    /// - All incremental leaves are on the current MMR.
+    /// - The MMR, which could generate the old root, appends all incremental leaves, becomes the
+    ///   current MMR.
+    pub fn verify_incremental(&self, root: T, prev_root: T, incremental: Vec<T>) -> Result<bool> {
+        let current_leaves_count = get_peak_map(self.mmr_size);
+        if current_leaves_count <= incremental.len() as u64 {
+            return Err(Error::CorruptedProof);
+        }
+        // Test if previous root is correct.
+        let prev_leaves_count = current_leaves_count - incremental.len() as u64;
+        let prev_peaks_positions = {
+            let prev_index = prev_leaves_count - 1;
+            let prev_mmr_size = leaf_index_to_mmr_size(prev_index);
+            let prev_peaks_positions = get_peaks(prev_mmr_size);
+            if prev_peaks_positions.len() != self.proof.len() {
+                return Err(Error::CorruptedProof);
+            }
+            prev_peaks_positions
+        };
+        let current_peaks_positions = get_peaks(self.mmr_size);
+
+        let mut reverse_index = prev_peaks_positions.len();
+        for (i, position) in prev_peaks_positions.iter().enumerate() {
+            if *position < current_peaks_positions[i] {
+                reverse_index = i;
+                break;
+            }
+        }
+        if reverse_index == prev_peaks_positions.len() {
+            reverse_index = prev_peaks_positions.len() - 1;
+        }
+        let mut prev_peaks: Vec<_> = self.proof_items().to_vec();
+        let mut reverse_peaks = prev_peaks.split_off(reverse_index);
+        reverse_peaks.reverse();
+        prev_peaks.extend(reverse_peaks);
+
+        let calculated_prev_root = bagging_peaks_hashes::<T, M>(prev_peaks)?;
+        if calculated_prev_root != prev_root {
+            return Ok(false);
+        }
+
+        // Test if incremental leaves are correct.
+        let leaves = incremental
+            .into_iter()
+            .enumerate()
+            .map(|(index, leaf)| {
+                let pos = leaf_index_to_pos(prev_leaves_count + index as u64);
+                (pos, leaf)
+            })
+            .collect();
+        self.verify(root, leaves)
     }
 }
 
