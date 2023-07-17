@@ -320,15 +320,12 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
         };
         let current_peaks_positions = get_peaks(self.mmr_size);
 
-        let mut reverse_index = prev_peaks_positions.len();
+        let mut reverse_index = prev_peaks_positions.len() - 1;
         for (i, position) in prev_peaks_positions.iter().enumerate() {
             if *position < current_peaks_positions[i] {
                 reverse_index = i;
                 break;
             }
-        }
-        if reverse_index == prev_peaks_positions.len() {
-            reverse_index = prev_peaks_positions.len() - 1;
         }
         let mut prev_peaks: Vec<_> = self.proof_items().to_vec();
         let mut reverse_peaks = prev_peaks.split_off(reverse_index);
