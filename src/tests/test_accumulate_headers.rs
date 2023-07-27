@@ -106,7 +106,7 @@ impl Prover {
         let mut mmr = MMR::<_, MergeHashWithTD, _>::new(self.positions.len() as u64, &self.store);
         // get previous element
         let mut previous = if let Some(pos) = self.positions.last() {
-            mmr.store().get_elem(*pos)?.expect("exists")
+            mmr.store().get(*pos)?.expect("exists")
         } else {
             let genesis = Header::default();
 
@@ -187,7 +187,7 @@ fn test_insert_header() {
     let proof = prover.gen_proof(h1, h2).expect("gen proof");
     let pos = leaf_index_to_pos(h1);
     assert_eq!(pos, prover.get_pos(h1));
-    assert_eq!(prove_elem, (&prover.store).get_elem(pos).unwrap().unwrap());
+    assert_eq!(prove_elem, (&prover.store).get(pos).unwrap().unwrap());
     let result = proof.verify(root, vec![(pos, prove_elem)]).expect("verify");
     assert!(result);
 }

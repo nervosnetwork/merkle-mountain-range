@@ -11,7 +11,8 @@ pub enum Error {
     NodeProofsNotSupported,
     /// The leaves is an empty list, or beyond the mmr range
     GenProofForInvalidLeaves,
-
+    /// The position of the updating leaf is out of range
+    UpdateLeafOutOfRange,
     /// The two nodes couldn't merge into one.
     MergeError(crate::string::String),
 }
@@ -26,6 +27,7 @@ impl core::fmt::Display for Error {
             CorruptedProof => write!(f, "Corrupted proof")?,
             NodeProofsNotSupported => write!(f, "Tried to verify membership of a non-leaf")?,
             GenProofForInvalidLeaves => write!(f, "Generate proof ofr invalid leaves")?,
+            UpdateLeafOutOfRange => write!(f, "Update leaf out of range")?,
             MergeError(msg) => write!(f, "Merge error {}", msg)?,
         }
         Ok(())

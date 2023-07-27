@@ -1,5 +1,5 @@
 use crate::collections::BTreeMap;
-use crate::{vec::Vec, MMRStoreReadOps, MMRStoreWriteOps, Result, MMR};
+use crate::{MMRStoreReadOps, MMRStoreWriteOps, Result, MMR};
 use core::cell::RefCell;
 
 #[derive(Clone)]
@@ -18,17 +18,14 @@ impl<T> MemStore<T> {
 }
 
 impl<T: Clone> MMRStoreReadOps<T> for &MemStore<T> {
-    fn get_elem(&self, pos: u64) -> Result<Option<T>> {
+    fn get(&self, pos: u64) -> Result<Option<T>> {
         Ok(self.0.borrow().get(&pos).cloned())
     }
 }
 
 impl<T> MMRStoreWriteOps<T> for &MemStore<T> {
-    fn append(&mut self, pos: u64, elems: Vec<T>) -> Result<()> {
-        let mut store = self.0.borrow_mut();
-        for (i, elem) in elems.into_iter().enumerate() {
-            store.insert(pos + i as u64, elem);
-        }
+    fn insert(&mut self, pos: u64, elem: T) -> Result<()> {
+        self.0.borrow_mut().insert(pos, elem);
         Ok(())
     }
 }
