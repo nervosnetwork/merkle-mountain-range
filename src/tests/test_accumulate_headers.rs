@@ -1,5 +1,5 @@
 use super::new_blake2b;
-use crate::{leaf_index_to_pos, util::MemStore, MMRStore, Merge, MerkleProof, Result, MMR};
+use crate::{leaf_index_to_pos, util::MemStore, MMRStoreReadOps, Merge, MerkleProof, Result, MMR};
 use bytes::{Bytes, BytesMut};
 use std::fmt;
 
@@ -106,7 +106,7 @@ impl Prover {
         let mut mmr = MMR::<_, MergeHashWithTD, _>::new(self.positions.len() as u64, &self.store);
         // get previous element
         let mut previous = if let Some(pos) = self.positions.last() {
-            MMRStore::<_>::get_elem(&&self.store, *pos)?.expect("exists")
+            mmr.store().get_elem(*pos)?.expect("exists")
         } else {
             let genesis = Header::default();
 
