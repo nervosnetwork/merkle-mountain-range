@@ -1,6 +1,6 @@
 use crate::mmr::take_while_vec;
-use crate::vec::Vec;
 use crate::vec;
+use crate::vec::Vec;
 
 pub fn leaf_index_to_pos(index: u64) -> u64 {
     // mmr_size - H - 1, H is the height(intervals) of last peak
