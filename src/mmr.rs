@@ -45,8 +45,16 @@ impl<T, M, S> MMR<T, M, S> {
         &self.batch
     }
 
+    pub fn batch_mut(&mut self) -> &mut MMRBatch<T, S> {
+        &mut self.batch
+    }
+
     pub fn store(&self) -> &S {
         self.batch.store()
+    }
+
+    pub fn store_mut(&mut self) -> &mut S {
+        self.batch.store_mut()
     }
 }
 
@@ -61,7 +69,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         Ok(Cow::Owned(elem))
     }
 
-    // push a element and return position
+    // push an element and return position
     pub fn push(&mut self, elem: T) -> Result<u64> {
         let mut elems = vec![elem];
         let elem_pos = self.mmr_size;
@@ -82,6 +90,48 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         // update mmr_size
         self.mmr_size = pos + 1;
         Ok(elem_pos)
+    }
+
+    // update an element at position
+    pub fn update(&mut self, mut pos: u64, mut elem: T) -> Result<()> {
+        if pos >= self.mmr_size || pos_height_in_tree(pos) > 0 {
+            return Err(Error::UpdateLeafOutOfRange);
+        }
+        self.batch.insert(pos, elem.clone());
+
+        let peaks = get_peaks(self.mmr_size);
+        let peak = peaks
+            .into_iter()
+            .find(|p| pos <= *p)
+            .expect("checked pos < self.mmr_size");
+        let mut height = 0;
+        while pos < peak {
+            let next_height = pos_height_in_tree(pos + 1);
+            let sibling_offset = sibling_offset(height);
+            if next_height > height {
+                elem = M::merge(
+                    &self
+                        .batch
+                        .get_elem(pos - sibling_offset)?
+                        .ok_or(Error::InconsistentStore)?,
+                    &elem,
+                )?;
+                pos += 1;
+            } else {
+                elem = M::merge(
+                    &elem,
+                    &self
+                        .batch
+                        .get_elem(pos + sibling_offset)?
+                        .ok_or(Error::InconsistentStore)?,
+                )?;
+                pos += parent_offset(height);
+            }
+            self.batch.insert(pos, elem.clone());
+            height += 1;
+        }
+
+        Ok(())
     }
 
     /// get_root

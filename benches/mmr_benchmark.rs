@@ -78,7 +78,7 @@ fn bench(c: &mut Criterion) {
         let proofs: Vec<_> = (0..10_000)
             .map(|_| {
                 let pos = positions.choose(&mut rng).unwrap();
-                let elem = (&store).get_elem(*pos).unwrap().unwrap();
+                let elem = (&store).get(*pos).unwrap().unwrap();
                 let proof = mmr.gen_proof(vec![*pos]).unwrap();
                 (pos, elem, proof)
             })
