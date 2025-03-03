@@ -25,7 +25,7 @@ impl core::fmt::Display for Error {
             StoreError(msg) => write!(f, "Store error {}", msg)?,
             CorruptedProof => write!(f, "Corrupted proof")?,
             NodeProofsNotSupported => write!(f, "Tried to verify membership of a non-leaf")?,
-            GenProofForInvalidLeaves => write!(f, "Generate proof ofr invalid leaves")?,
+            GenProofForInvalidLeaves => write!(f, "Generate proof for invalid leaves")?,
             MergeError(msg) => write!(f, "Merge error {}", msg)?,
         }
         Ok(())
