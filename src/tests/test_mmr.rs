@@ -3,7 +3,7 @@ use crate::{
     helper::pos_height_in_tree,
     leaf_index_to_mmr_size,
     util::{MemMMR, MemStore},
-    Error,
+    Error, Merge, MerkleProof,
 };
 use faster_hex::hex_string;
 use proptest::prelude::*;
@@ -150,6 +150,27 @@ fn test_gen_proof_with_duplicate_leaves() {
     test_mmr(10, vec![5, 5]);
 }
 
+#[test]
+fn test_duplicate_proof_items() {
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+    let positions: Vec<u64> = (0u32..3)
+        .map(|i| mmr.push(NumberHash::from(i)).unwrap())
+        .collect();
+    mmr.commit().expect("commit changes");
+    let root = mmr.get_root().expect("get root");
+    let proof = mmr.gen_proof(vec![positions[2]]).expect("gen proof");
+    let mut proof_items = proof.proof_items().iter().cloned().collect::<Vec<_>>();
+    proof_items.push(proof_items.last().unwrap().clone());
+    let duplicate_proof =
+        MerkleProof::<NumberHash, MergeNumberHash>::new(proof.mmr_size(), proof_items);
+
+    let result = duplicate_proof
+        .verify(root, vec![(positions[2], NumberHash::from(2))])
+        .unwrap();
+    assert!(!result);
+}
+
 fn test_invalid_proof_verification(
     leaf_count: u32,
     positions_to_verify: Vec<u64>,
@@ -158,7 +179,6 @@ fn test_invalid_proof_verification(
     // optionally handroll proof from these positions
     handrolled_proof_positions: Option<Vec<u64>>,
 ) {
-    use crate::{Merge, MerkleProof};
     use std::fmt::{Debug, Formatter};
 
     // Simple item struct to allow debugging the contents of MMR nodes/peaks
