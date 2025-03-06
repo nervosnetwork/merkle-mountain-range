@@ -4,7 +4,7 @@ use criterion::Criterion;
 
 use ckb_merkle_mountain_range::{leaf_index_to_mmr_size, leaf_index_to_pos};
 
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 
 fn bench(c: &mut Criterion) {
     c.bench_function("left_index_to_pos", |b| {

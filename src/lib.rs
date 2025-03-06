@@ -12,7 +12,7 @@ pub mod util;
 pub use error::{Error, Result};
 pub use helper::{leaf_index_to_mmr_size, leaf_index_to_pos};
 pub use merge::Merge;
-pub use mmr::{MerkleProof, MMR};
+pub use mmr::{MMR, MerkleProof};
 pub use mmr_store::{MMRStoreReadOps, MMRStoreWriteOps};
 
 cfg_if::cfg_if! {

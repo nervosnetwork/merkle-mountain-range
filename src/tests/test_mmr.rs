@@ -1,9 +1,9 @@
 use super::{MergeNumberHash, NumberHash};
 use crate::{
+    Error,
     helper::pos_height_in_tree,
     leaf_index_to_mmr_size,
     util::{MemMMR, MemStore},
-    Error,
 };
 use faster_hex::hex_string;
 use proptest::prelude::*;
@@ -234,9 +234,11 @@ fn test_invalid_proof_verification(
         }
         Err(Error::NodeProofsNotSupported) => {
             // if couldn't generate proof, then it contained a non-leaf
-            assert!(positions_to_verify
-                .iter()
-                .any(|pos| pos_height_in_tree(*pos) > 0));
+            assert!(
+                positions_to_verify
+                    .iter()
+                    .any(|pos| pos_height_in_tree(*pos) > 0)
+            );
         }
         Err(e) => panic!("Unexpected error: {}", e),
     }

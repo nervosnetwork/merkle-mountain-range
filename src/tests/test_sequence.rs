@@ -3,7 +3,7 @@ use std::fmt;
 use proptest::proptest;
 use rand::{prelude::*, thread_rng};
 
-use crate::{util::MemStore, Merge, Result, MMR};
+use crate::{MMR, Merge, Result, util::MemStore};
 
 #[derive(Eq, PartialEq, Clone, Default)]
 struct NumberRange {

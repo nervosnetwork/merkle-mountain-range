@@ -1,5 +1,5 @@
 use super::new_blake2b;
-use crate::{leaf_index_to_pos, util::MemStore, MMRStoreReadOps, Merge, MerkleProof, Result, MMR};
+use crate::{MMR, MMRStoreReadOps, Merge, MerkleProof, Result, leaf_index_to_pos, util::MemStore};
 use bytes::{Bytes, BytesMut};
 use std::fmt;
 
