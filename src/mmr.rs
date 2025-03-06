@@ -16,6 +16,7 @@ use crate::vec::Vec;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
 use core::marker::PhantomData;
+use core::mem;
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct MMR<T, M, S> {
@@ -498,5 +499,5 @@ fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
             return v.drain(..i).collect();
         }
     }
-    v.drain(..).collect()
+    mem::take(v)
 }
