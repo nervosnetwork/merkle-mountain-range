@@ -1,5 +1,5 @@
 use crate::collections::BTreeMap;
-use crate::{vec::Vec, MMRStoreReadOps, MMRStoreWriteOps, Result, MMR};
+use crate::{MMR, MMRStoreReadOps, MMRStoreWriteOps, Result, vec::Vec};
 use core::cell::RefCell;
 
 #[derive(Clone)]
