@@ -3,6 +3,7 @@ name = "ckb-merkle-mountain-range"
 version = "0.6.0"
 authors = ["Nervos Core Dev <dev@nervos.org>"]
 edition = "2018"
+rust-version = "1.60.0"
 license = "MIT"
 description = "A generalized merkle mountain range implementation"
 repository = "https://github.com/nervosnetwork/merkle-mountain-range"
