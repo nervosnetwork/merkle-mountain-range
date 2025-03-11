@@ -4,7 +4,7 @@ extern crate criterion;
 use criterion::{BenchmarkId, Criterion};
 
 use bytes::Bytes;
-use ckb_merkle_mountain_range::{util::MemStore, Error, MMRStoreReadOps, Merge, Result, MMR};
+use ckb_merkle_mountain_range::{Error, MMR, MMRStoreReadOps, Merge, Result, util::MemStore};
 use rand::{seq::SliceRandom, thread_rng};
 use std::convert::TryFrom;
 

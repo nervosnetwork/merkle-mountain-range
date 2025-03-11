@@ -1,4 +1,4 @@
-use crate::{vec::Vec, Result};
+use crate::{Result, vec::Vec};
 
 #[derive(Default)]
 pub struct MMRBatch<Elem, Store> {
