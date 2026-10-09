@@ -19,7 +19,7 @@ fn test_incremental_with_params(start: u32, steps: usize, turns: usize) {
     let _positions: Vec<u64> = (0u32..start)
         .map(|_| {
             let pos = mmr.push(NumberHash::from(curr)).unwrap();
-            curr += 1;
+            curr = curr.saturating_add(1);
             pos
         })
         .collect();
@@ -32,7 +32,7 @@ fn test_incremental_with_params(start: u32, steps: usize, turns: usize) {
             |(mut positions, mut leaves), _| {
                 let leaf = NumberHash::from(curr);
                 let pos = mmr.push(leaf.clone()).unwrap();
-                curr += 1;
+                curr = curr.saturating_add(1);
                 positions.push(pos);
                 leaves.push(leaf);
                 (positions, leaves)

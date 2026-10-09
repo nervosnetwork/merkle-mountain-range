@@ -71,8 +71,8 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         let mut peak = 1;
         while (peak_map & peak) != 0 {
             peak <<= 1;
-            pos += 1;
-            let left_pos = pos - peak;
+            pos = pos.saturating_add(1);
+            let left_pos = pos.saturating_sub(peak);
             let left_elem = self.find_elem(left_pos, &elems)?;
             let right_elem = elems.last().expect("checked");
             let parent_elem = M::merge(&left_elem, right_elem)?;
@@ -81,7 +81,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         // store hashes
         self.batch.append(elem_pos, elems);
         // update mmr_size
-        self.mmr_size = pos + 1;
+        self.mmr_size = pos.saturating_add(1);
         Ok(elem_pos)
     }
 
@@ -153,14 +153,18 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
 
             // calculate sibling
             let (sib_pos, parent_pos) = {
-                let next_height = pos_height_in_tree(pos + 1);
+                let next_pos = pos.saturating_add(1);
+                let next_height = pos_height_in_tree(next_pos);
                 let sibling_offset = sibling_offset(height);
                 if next_height > height {
                     // implies pos is right sibling
-                    (pos - sibling_offset, pos + 1)
+                    (pos.saturating_sub(sibling_offset), next_pos)
                 } else {
                     // pos is left sibling
-                    (pos + sibling_offset, pos + parent_offset(height))
+                    (
+                        pos.saturating_add(sibling_offset),
+                        pos.saturating_add(parent_offset(height)),
+                    )
                 }
             };
 
@@ -176,7 +180,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
             }
             if parent_pos < peak_pos {
                 // save pos to tree buf
-                queue.push_back((parent_pos, height + 1));
+                queue.push_back((parent_pos, height.saturating_add(1)));
             }
         }
         Ok(())
@@ -202,11 +206,11 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         let peaks = get_peaks(self.mmr_size);
         let mut proof: Vec<T> = Vec::new();
         // generate merkle proof for each peaks
-        let mut bagging_track = 0;
+        let mut bagging_track: usize = 0;
         for peak_pos in peaks {
             let pos_list: Vec<_> = take_while_vec(&mut pos_list, |&pos| pos <= peak_pos);
             if pos_list.is_empty() {
-                bagging_track += 1;
+                bagging_track = bagging_track.saturating_add(1);
             } else {
                 bagging_track = 0;
             }
@@ -219,7 +223,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         }
 
         if bagging_track > 1 {
-            let rhs_peaks = proof.split_off(proof.len() - bagging_track);
+            let rhs_peaks = proof.split_off(proof.len().saturating_sub(bagging_track));
             proof.push(self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks"));
         }
 
@@ -273,7 +277,8 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
         new_mmr_size: u64,
     ) -> Result<T> {
         let pos_height = pos_height_in_tree(new_pos);
-        let next_height = pos_height_in_tree(new_pos + 1);
+        let next_pos = new_pos.saturating_add(1);
+        let next_height = pos_height_in_tree(next_pos);
         if next_height > pos_height {
             let mut peaks_hashes =
                 calculate_peaks_hashes::<_, M, _>(leaves, self.mmr_size, self.proof.iter())?;
@@ -281,7 +286,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
             // reverse touched peaks
             let mut i = 0;
             while peaks_pos[i] < new_pos {
-                i += 1
+                i = i.saturating_add(1);
             }
             peaks_hashes[i..].reverse();
             calculate_root::<_, M, _>(vec![(new_pos, new_elem)], new_mmr_size, peaks_hashes.iter())
@@ -309,9 +314,9 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
             return Err(Error::CorruptedProof);
         }
         // Test if previous root is correct.
-        let prev_leaves_count = current_leaves_count - incremental.len() as u64;
+        let prev_leaves_count = current_leaves_count.saturating_sub(incremental.len() as u64);
         let prev_peaks_positions = {
-            let prev_index = prev_leaves_count - 1;
+            let prev_index = prev_leaves_count.saturating_sub(1);
             let prev_mmr_size = leaf_index_to_mmr_size(prev_index);
             let prev_peaks_positions = get_peaks(prev_mmr_size);
             if prev_peaks_positions.len() != self.proof.len() {
@@ -321,7 +326,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
         };
         let current_peaks_positions = get_peaks(self.mmr_size);
 
-        let mut reverse_index = prev_peaks_positions.len() - 1;
+        let mut reverse_index = prev_peaks_positions.len().saturating_sub(1);
         for (i, position) in prev_peaks_positions.iter().enumerate() {
             if *position < current_peaks_positions[i] {
                 reverse_index = i;
@@ -343,7 +348,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
             .into_iter()
             .enumerate()
             .map(|(index, leaf)| {
-                let pos = leaf_index_to_pos(prev_leaves_count + index as u64);
+                let pos = leaf_index_to_pos(prev_leaves_count.saturating_add(index as u64));
                 (pos, leaf)
             })
             .collect();
@@ -375,13 +380,14 @@ fn calculate_peak_root<'a, T: 'a, M: Merge<Item = T>, I: Iterator<Item = &'a T>>
             }
         }
         // calculate sibling
-        let next_height = pos_height_in_tree(pos + 1);
+        let next_pos = pos.saturating_add(1);
+        let next_height = pos_height_in_tree(next_pos);
         let (parent_pos, parent_item) = {
             let sibling_offset = sibling_offset(height);
             if next_height > height {
                 // implies pos is right sibling
-                let sib_pos = pos - sibling_offset;
-                let parent_pos = pos + 1;
+                let sib_pos = pos.saturating_sub(sibling_offset);
+                let parent_pos = next_pos;
                 let parent_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
                     let sibling_item = queue.pop_front().map(|(_, item, _)| item).unwrap();
                     M::merge(&sibling_item, &item)?
@@ -392,8 +398,8 @@ fn calculate_peak_root<'a, T: 'a, M: Merge<Item = T>, I: Iterator<Item = &'a T>>
                 (parent_pos, parent_item)
             } else {
                 // pos is left sibling
-                let sib_pos = pos + sibling_offset;
-                let parent_pos = pos + parent_offset(height);
+                let sib_pos = pos.saturating_add(sibling_offset);
+                let parent_pos = pos.saturating_add(parent_offset(height));
                 let parent_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
                     let sibling_item = queue.pop_front().map(|(_, item, _)| item).unwrap();
                     M::merge(&item, &sibling_item)?
@@ -406,7 +412,7 @@ fn calculate_peak_root<'a, T: 'a, M: Merge<Item = T>, I: Iterator<Item = &'a T>>
         };
 
         if parent_pos <= peak_pos {
-            queue.push_back((parent_pos, parent_item, height + 1))
+            queue.push_back((parent_pos, parent_item, height.saturating_add(1)))
         } else {
             return Err(Error::CorruptedProof);
         }
@@ -432,7 +438,7 @@ fn calculate_peaks_hashes<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Ite
     leaves.dedup_by(|a, b| a.0 == b.0);
     let peaks = get_peaks(mmr_size);
 
-    let mut peaks_hashes: Vec<T> = Vec::with_capacity(peaks.len() + 1);
+    let mut peaks_hashes: Vec<T> = Vec::with_capacity(peaks.len().saturating_add(1));
     for peak_pos in peaks {
         let mut leaves: Vec<_> = take_while_vec(&mut leaves, |(pos, _)| *pos <= peak_pos);
         let peak_root = if leaves.len() == 1 && leaves[0].0 == peak_pos {

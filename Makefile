@@ -9,7 +9,7 @@ bench-test:
 	cargo bench -- --test
 
 clippy:
-	cargo clippy  --all --all-features --all-targets
+	cargo clippy  --all --all-features --all-targets -- -D clippy::arithmetic-side-effects
 
 fmt:
 	cargo fmt --all -- --check

@@ -28,11 +28,12 @@ impl<Elem: Clone, Store: MMRStoreReadOps<Elem>> MMRBatch<Elem, Store> {
         for (start_pos, elems) in self.memory_batch.iter().rev() {
             if pos < *start_pos {
                 continue;
-            } else if pos < start_pos + elems.len() as u64 {
-                return Ok(elems.get((pos - start_pos) as usize).cloned());
-            } else {
-                break;
             }
+            let offset = pos.saturating_sub(*start_pos);
+            if offset < elems.len() as u64 {
+                return Ok(elems.get(offset as usize).cloned());
+            }
+            break;
         }
         self.store.get_elem(pos)
     }

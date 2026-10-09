@@ -3,17 +3,19 @@ use crate::vec::Vec;
 
 pub fn leaf_index_to_pos(index: u64) -> u64 {
     // mmr_size - H - 1, H is the height(intervals) of last peak
-    leaf_index_to_mmr_size(index) - (index + 1).trailing_zeros() as u64 - 1
+    leaf_index_to_mmr_size(index)
+        .saturating_sub(index.saturating_add(1).trailing_zeros() as u64)
+        .saturating_sub(1)
 }
 
 pub fn leaf_index_to_mmr_size(index: u64) -> u64 {
     // leaf index start with 0
-    let leaves_count = index + 1;
+    let leaves_count = index.saturating_add(1);
 
     // the peak count(k) is actually the count of 1 in leaves count's binary representation
     let peak_count = leaves_count.count_ones() as u64;
 
-    2 * leaves_count - peak_count
+    leaves_count.saturating_mul(2).saturating_sub(peak_count)
 }
 
 pub fn pos_height_in_tree(mut pos: u64) -> u8 {
@@ -24,7 +26,7 @@ pub fn pos_height_in_tree(mut pos: u64) -> u8 {
     let mut peak_size = u64::MAX >> pos.leading_zeros();
     while peak_size > 0 {
         if pos >= peak_size {
-            pos -= peak_size;
+            pos = pos.saturating_sub(peak_size);
         }
         peak_size >>= 1;
     }
@@ -36,7 +38,7 @@ pub fn parent_offset(height: u8) -> u64 {
 }
 
 pub fn sibling_offset(height: u8) -> u64 {
-    (2 << height) - 1
+    (2u64 << height).saturating_sub(1)
 }
 
 /// Returns the height of the peaks in the mmr, presented by a bitmap.
@@ -66,7 +68,7 @@ pub fn get_peak_map(mmr_size: u64) -> u64 {
     while peak_size > 0 {
         peak_map <<= 1;
         if pos >= peak_size {
-            pos -= peak_size;
+            pos = pos.saturating_sub(peak_size);
             peak_map |= 1;
         }
         peak_size >>= 1;
@@ -98,13 +100,13 @@ pub fn get_peaks(mmr_size: u64) -> Vec<u64> {
     let leading_zeros = mmr_size.leading_zeros();
     let mut pos = mmr_size;
     let mut peak_size = u64::MAX >> leading_zeros;
-    let mut peaks = Vec::with_capacity(64 - leading_zeros as usize);
-    let mut peaks_sum = 0;
+    let mut peaks = Vec::with_capacity(64usize.saturating_sub(leading_zeros as usize));
+    let mut peaks_sum: u64 = 0;
     while peak_size > 0 {
         if pos >= peak_size {
-            pos -= peak_size;
-            peaks.push(peaks_sum + peak_size - 1);
-            peaks_sum += peak_size;
+            pos = pos.saturating_sub(peak_size);
+            peaks_sum = peaks_sum.saturating_add(peak_size);
+            peaks.push(peaks_sum.saturating_sub(1));
         }
         peak_size >>= 1;
     }

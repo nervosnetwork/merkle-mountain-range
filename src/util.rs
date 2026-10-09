@@ -27,7 +27,7 @@ impl<T> MMRStoreWriteOps<T> for &MemStore<T> {
     fn append(&mut self, pos: u64, elems: Vec<T>) -> Result<()> {
         let mut store = self.0.borrow_mut();
         for (i, elem) in elems.into_iter().enumerate() {
-            store.insert(pos + i as u64, elem);
+            store.insert(pos.saturating_add(i as u64), elem);
         }
         Ok(())
     }

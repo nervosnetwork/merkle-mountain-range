@@ -78,7 +78,7 @@ impl Merge for MergeHashWithTD {
         hasher.update(&lhs.serialize());
         hasher.update(&rhs.serialize());
         hasher.finalize(&mut hash);
-        let td = lhs.td + rhs.td;
+        let td = lhs.td.saturating_add(rhs.td);
         Ok(HashWithTD {
             hash: hash.to_vec().into(),
             td,
@@ -120,7 +120,7 @@ impl Prover {
             previous
         };
         let last_number = self.headers.last().unwrap().0.number;
-        for i in (last_number + 1)..=(last_number + count) {
+        for i in last_number.saturating_add(1)..=last_number.saturating_add(count) {
             let block = Header {
                 number: i,
                 parent_hash: previous.hash.clone(),
